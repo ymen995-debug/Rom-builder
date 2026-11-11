@@ -61,11 +61,9 @@ jobs:
           echo "Repo sync baslatiliyor..."
           repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune --force-sync
          
-      - name: Build ROM for Selected Device
-        run: |
-          cd ~/rom
-          export PATH=~/bin:$PATH
-          source build/envsetup.sh
-          echo "Derleme baslatiliyor: ${{ github.event.inputs.device_codename }}"
-          lunch lineage_${{ github.event.inputs.device_codename }}-userdebug
-          mka bacon -j$(nproc --all)
+         - name: Build ROM for Selected Device
+           run: |
+             source build/envsetup.sh
+             export ALLOW_MISSING_DEPENDENCIES=true
+             lunch crdroid_agold-userdebug
+             mka bacon showcommands=true V=1 || { echo "BUILD FAILED MAN"; exit 1; }
