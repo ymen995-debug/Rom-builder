@@ -40,32 +40,30 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git repo wget curl python3
 
-      - name: Initialize Base Manifest with Token & Copy Local Manifests
+      - name: Initialize Base Manifest from Local Repository
         run: |
           rm -rf ~/rom
           mkdir -p ~/rom
           cd ~/rom
           
-          # Kullanıcı adı ve token ile global credential ayarlarını mühürlüyoruz
           git config --global user.name "${{ github.event.inputs.github_username }}"
           git config --global user.email "${{ github.event.inputs.github_username }}@debug.local"
           
-          # Token'ı git credential helper'a gömüyoruz ki repo init ve sync esnasında asla şifre sormasın
-          git config --global credential.helper store
-          echo "https://${{ github.event.inputs.github_username }}:${{ github.event.inputs.github_token }}@github.com" > ~/.git-credentials
+          echo "Yerel manifest dosyaları çalışma alanına kopyalanıyor..."
+          mkdir -p .repo/manifests
+          mkdir -p .repo/local_manifests
           
-          echo "Token destekli LineageOS manifesti init ediliyor..."
+          cp -r $GITHUB_WORKSPACE/.repo/manifests/* .repo/manifests/
+          cp -r $GITHUB_WORKSPACE/local_manifests/* .repo/local_manifests/
+          
+          echo "Repo aracı kuruluyor..."
           mkdir -p ~/bin
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
           chmod a+x ~/bin/repo
           export PATH=~/bin:$PATH
           
-          # Global git credentials zaten token'ı tuttuğu için repo init düz URL ile sorunsuz çalışır
-          repo init -u https://github.com/LineageOS/android_manifest.git -b lineage-17.1 --depth=1 --no-repo-verify         
-          
-          # Yerel manifestleri kopyala
-          mkdir -p .repo/local_manifests
-          cp -r $GITHUB_WORKSPACE/local_manifests/* .repo/local_manifests/
+          # Tamamen yerel manifest bazlı init
+          repo init --local-manifests --no-repo-verify
           
           echo "Repo sync baslatiliyor..."
           repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune
