@@ -22,7 +22,7 @@ on:
       github_username:
         description: 'GitHub Kullanıcı Adın'
         required: true
-        default: 'kral_eymen219'
+        default: 'ymen995-debug'
       github_token:
         description: 'GitHub Personal Access Token (PAT)'
         required: true
@@ -63,7 +63,7 @@ jobs:
           export PATH=~/bin:$PATH
           
           # İnternetten şifre istemeyen, tamamen yerel manifest kullanan init komutu
-          repo init  --no-repo-verify
+          repo init -u https://github.com/crdroidandroid/android.git -b 10.0 --no-repo-verify --depth=1
           
           echo "Repo sync baslatiliyor..."
           repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune --force-sync
