@@ -50,7 +50,7 @@ jobs:
           git config --global user.email "ymen995@debug.local"
           
           echo "Secilen ROM: ${{ github.event.inputs.rom_type }}"
-          repo init -u https://github.com/crdroidandroid/android_manifest.git -b 10.0 --depth=1
+          repo init -u https://github.com/crdroidandroid/android_manifest.git -b 10.0 --depth=1 --no-repo-verify
           repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
       - name: Build ROM for Selected Device
