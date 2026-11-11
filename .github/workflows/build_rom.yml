@@ -51,9 +51,9 @@ jobs:
           
           echo "Secilen ROM: crdroid"
           
-          GIT_TERMINAL_PROMPT=0 repo init -u https://github.com/crdroidandroid/android_manifest.git -b 10.0 --depth=1 --no-repo-verify
+          # HTTPS auth duvarını bypas eden auth-free URL formatı
+          GIT_TERMINAL_PROMPT=0 repo init -u https://github.com/crdroidandroid/android_manifest.git -b 10.0 --depth=1 --no-repo-verify --repo-url=https://gerrit.googlesource.com/git-repo
           
-          # Ağı yormayan, tekli ve güvenli sync ayarı
           repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune
 
       - name: Build ROM for Selected Device
