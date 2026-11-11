@@ -1,1 +1,6 @@
-404: Not Found
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <remote name="github" fetch="https://github.com/" />
+  <default revision="10.0" remote="github" sync-j="4" />
+  <project name="crdroidandroid/android" path=".repo/manifests" revision="10.0" />
+</manifest>

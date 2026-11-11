@@ -66,7 +66,7 @@ jobs:
           repo init  --no-repo-verify
           
           echo "Repo sync baslatiliyor..."
-          repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune
+          repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune --force-sync
          
       - name: Build ROM for Selected Device
         run: |
