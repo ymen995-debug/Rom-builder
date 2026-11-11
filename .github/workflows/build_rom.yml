@@ -50,15 +50,6 @@ jobs:
           git config --global user.email "ymen995@debug.local"
           
           echo "Secilen ROM: ${{ github.event.inputs.rom_type }}"
-          
-          if [ "${{ github.event.inputs.rom_type }}" == "crdroid" ]; then
-              # GitHub Secrets içindeki GH_PAT anahtarını güvenli bir şekilde çağırıyoruz
-              ROM_URL="https://${{ secrets.GH_PAT }}@github.com/crdroidandroid/android_manifest.git"
-          else
-              ROM_URL="https://github.com/android.googlesource.com/platform/manifest"
-          fi
-          
-          echo "Manifest URL: $ROM_URL"
           repo init -u https://github.com/crdroidandroid/android_manifest.git -b 10.0 --depth=1
           repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
