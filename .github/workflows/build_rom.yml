@@ -63,7 +63,7 @@ jobs:
           export PATH=~/bin:$PATH
           
           # İnternetten şifre istemeyen, tamamen yerel manifest kullanan init komutu
-          repo init --local-manifests --no-repo-verify
+          repo init  --no-repo-verify
           
           echo "Repo sync baslatiliyor..."
           repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune
