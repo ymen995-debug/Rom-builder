@@ -1,0 +1,73 @@
+name: Build CrDroid for Huawei MatePad T10s
+
+on:
+  workflow_dispatch:
+    inputs:
+      rom_type:
+        description: 'Derlenecek ROM Türü'
+        required: true
+        default: 'crdroid'
+      android_version:
+        description: 'Android Sürümü'
+        required: true
+        default: '10'
+      device_brand:
+        description: 'Cihaz Markası'
+        required: true
+        default: 'huawei'
+      device_codename:
+        description: 'Cihaz Kod Adı'
+        required: true
+        default: 'agold'
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git repo wget curl
+
+      - name: Install Google Repo Tool
+        run: |
+          mkdir -p ~/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+x ~/bin/repo
+
+      - name: Initialize ROM Manifest based on user selection
+        run: |
+          mkdir -p ~/rom
+          cd ~/rom
+          export PATH=~/bin:$PATH
+          
+          # Git kimlik ayarlarını yapıyoruz ki hata vermesin
+          git config --global user.name "ymen995-debug"
+          git config --global user.email "ymen995@debug.local"
+          
+          echo "Secilen ROM: ${{ github.event.inputs.rom_type }}"
+          
+          if [ "${{ github.event.inputs.rom_type }}" == "crdroid" ]; then
+              # GitHub Secrets içindeki GH_PAT anahtarını güvenli bir şekilde çağırıyoruz
+              ROM_URL="https://${{ secrets.GH_PAT }}@github.com/crdroidandroid/android_manifest.git"
+          else
+              ROM_URL="https://github.com/android.googlesource.com/platform/manifest"
+          fi
+          
+          echo "Manifest URL: $ROM_URL"
+          repo init -u $ROM_URL -b ${{ github.event.inputs.android_version }}.0 --git-fs --depth=1
+          repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+
+      - name: Build ROM for Selected Device
+        run: |
+          cd ~/rom
+          export PATH=~/bin:$PATH
+          source build/envsetup.sh
+          echo "Secilen cihaz kod adina gore lunch komutu"
+          echo "Derleme baslatiliyor: ${{ github.event.inputs.device_codename }}"
+          lunch lineage_${{ github.event.inputs.device_codename }}-userdebug
+          mka bacon -j$(nproc --all)
