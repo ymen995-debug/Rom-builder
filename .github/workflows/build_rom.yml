@@ -39,24 +39,25 @@ jobs:
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
           chmod a+x ~/bin/repo
 
-      - name: Initialize ROM Manifest based on user selection
+      - name: Initialize and Sync crDroid Manifest
         run: |
           rm -rf ~/rom
           mkdir -p ~/rom
           cd ~/rom
           export PATH=~/bin:$PATH
           
-          # GitHub Actions'ın eklediği çakışan auth header'larını temizliyoruz
-          git config --global --unset-all http.https://github.com/.extraheader || true
-          git config --unset-all http.https://github.com/.extraheader || true
+          # Git kimlik sistemini ve credential helper'ı tamamen yok ediyoruz
+          git config --global --unset-all credential.helper || true
+          git config --global credential.helper ""
+          git config --system --unset-all credential.helper || true
+          git config --system credential.helper ""
           
-          # Kimlik bilgilerini sabitle
-          git config --global user.name "kral_eymen219"
-          git config --global user.email "ymen995@debug.local"
+          # Git'in HTTPS yerine kimlik sormayan yola girmesini zorla
+          git config --global url."https://github.com/".insteadOf git://github.com/
           
           echo "Secilen ROM: crdroid"
           
-          # Doğrudan kimlik sormayan URL formatı ve non-interactive mod
+          # Auth prompt'u sıfırlayan ve doğrudan çeken repo init
           GIT_TERMINAL_PROMPT=0 repo init -u https://github.com/crdroidandroid/android_manifest.git -b 10.0 --depth=1 --no-repo-verify
           repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
