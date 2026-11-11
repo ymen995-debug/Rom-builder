@@ -49,13 +49,6 @@ jobs:
           git config --global user.name "${{ github.event.inputs.github_username }}"
           git config --global user.email "${{ github.event.inputs.github_username }}@debug.local"
           
-          echo "Termux'tan ellerimizle hazırladığımız yerel manifestler kopyalanıyor..."
-          mkdir -p .repo/manifests
-          mkdir -p .repo/local_manifests
-          
-          cp -r $GITHUB_WORKSPACE/.repo/manifests/* .repo/manifests/
-          cp -r $GITHUB_WORKSPACE/.repo/local_manifests/* .repo/local_manifests/
-          
           echo "Repo aracı kuruluyor..."
           mkdir -p ~/bin
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
@@ -63,7 +56,7 @@ jobs:
           export PATH=~/bin:$PATH
           
           # İnternetten şifre istemeyen, tamamen yerel manifest kullanan init komutu
-          repo init -u https://github.com/crdroidandroid/android.git -b 10.0 -m default.xml --no-repo-verify --depth=1
+          repo init -u https://github.com/crdroidandroid/android.git -b 10.0 --no-repo-verify --depth=1
           
           echo "Repo sync baslatiliyor..."
           repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune --force-sync
