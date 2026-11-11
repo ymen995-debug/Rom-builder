@@ -62,8 +62,8 @@ jobs:
           chmod a+x ~/bin/repo
           export PATH=~/bin:$PATH
           
-          # Tamamen yerel manifest bazlı init
-          repo init --local-manifests --no-repo-verify
+          # --local-manifests parametresini kaldırıyoruz, repo zaten .repo/local_manifests klasörünü otomatik görür
+          repo init -u https://github.com/LineageOS/android_manifest.git -b lineage-17.1 --depth=1 --no-repo-verify
           
           echo "Repo sync baslatiliyor..."
           repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune
