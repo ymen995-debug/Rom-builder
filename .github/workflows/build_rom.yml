@@ -45,25 +45,21 @@ jobs:
           rm -rf ~/rom
           mkdir -p ~/rom
           cd ~/rom
-          
           git config --global user.name "${{ github.event.inputs.github_username }}"
           git config --global user.email "${{ github.event.inputs.github_username }}@debug.local"
-          
           echo "Repo aracı kuruluyor..."
           mkdir -p ~/bin
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
           chmod a+x ~/bin/repo
           export PATH=~/bin:$PATH
-          
-          # İnternetten şifre istemeyen, tamamen yerel manifest kullanan init komutu
+          # Internetten sifre istemeyen, tamamen yerel manifest kullanan init komutu
           repo init -u https://github.com/crdroidandroid/android.git -b 10.0 --no-repo-verify --depth=1
-          
           echo "Repo sync baslatiliyor..."
           repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune --force-sync
-         
-         - name: Build ROM for Selected Device
-           run: |
-             source build/envsetup.sh
-             export ALLOW_MISSING_DEPENDENCIES=true
-             lunch crdroid_agold-userdebug
-             mka bacon showcommands=true V=1 || { echo "BUILD FAILED MAN"; exit 1; }
+
+      - name: Build ROM for Selected Device
+        run: |
+          source build/envsetup.sh
+          export ALLOW_MISSING_DEPENDENCIES=true
+          lunch crdroid_agold-userdebug
+          mka bacon showcommands=true V=1 || { echo "BUILD FAILED MAN"; exit 1; }
