@@ -35,18 +35,18 @@ jobs:
           mkdir -p ~/rom/.repo
           cd ~/rom
           
-          # Auth kilidini ve credential helper'ı global olarak patlatıyoruz
+          # Git kimliklerini ve credential istemcilerini tamamen devre dışı bırakıyoruz
           git config --global credential.helper ""
-          git config --global url."https://github.com/".insteadOf git://github.com/
-          git config --global user.name "kral_eymen219"
+          git config --global user.name "ymen995-debug"
           git config --global user.email "ymen995@debug.local"
           
           echo "Secilen ROM: ${{ github.event.inputs.rom_type }}"
           echo "Secilen Android: ${{ github.event.inputs.android_version }}"
           echo "Hedef Cihaz: ${{ github.event.inputs.device_codename }}"
           
-          # Repo init yerine doğrudan manifesti klonlayıp auth duvarını bypas ediyoruz
-          git clone https://github.com/crdroidandroid/android_manifest.git -b ${{ github.event.inputs.android_version }} --depth=1 .repo/manifests
+          # Asla şifre sormayan ve auth prompt'u tetiklemeyen token-less public clone formatı
+          git clone https://github.com/crdroidandroid/android_manifest.git -b ${{ github.event.inputs.android_version }} --depth=1 .repo/manifests || \
+          git clone https://x-access-token:@github.com/crdroidandroid/android_manifest.git -b ${{ github.event.inputs.android_version }} --depth=1 .repo/manifests
           
           mkdir -p .repo/manifests.git
           ln -s ../manifests/.git .repo/manifests.git/refs
