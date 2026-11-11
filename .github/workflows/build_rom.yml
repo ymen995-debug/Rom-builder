@@ -29,35 +29,33 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git repo wget curl python3
 
-      - name: Clone Manifest Directly & Bypass Auth
+      - name: Initialize Base Manifest and Copy Local Manifests
         run: |
           rm -rf ~/rom
-          mkdir -p ~/rom/.repo
+          mkdir -p ~/rom
           cd ~/rom
           
-          # Git kimliklerini ve credential istemcilerini tamamen devre dışı bırakıyoruz
           git config --global credential.helper ""
-          git config --global user.name "ymen995-debug"
+          git config --global user.name "kral_eymen219"
           git config --global user.email "ymen995@debug.local"
           
-          echo "Secilen ROM: ${{ github.event.inputs.rom_type }}"
-          echo "Secilen Android: ${{ github.event.inputs.android_version }}"
-          echo "Hedef Cihaz: ${{ github.event.inputs.device_codename }}"
-          
-          # Asla şifre sormayan ve auth prompt'u tetiklemeyen token-less public clone formatı
-          git clone https://github.com/crdroidandroid/android_manifest.git -b ${{ github.event.inputs.android_version }} --depth=1 .repo/manifests || \
-          git clone https://x-access-token:@github.com/crdroidandroid/android_manifest.git -b ${{ github.event.inputs.android_version }} --depth=1 .repo/manifests
-          
-          mkdir -p .repo/manifests.git
-          ln -s ../manifests/.git .repo/manifests.git/refs
-          ln -s manifests/default.xml .repo/manifest.xml
-          
-          # Google repo aracını indir ve sync et
+          echo "Ana LineageOS 17.1 (Android 10) Manifesti Kuruluyor..."
           mkdir -p ~/bin
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
           chmod a+x ~/bin/repo
           export PATH=~/bin:$PATH
           
+          # Sağlam Lineage manifestini init et
+          repo init -u https://github.com/LineageOS/android_manifest.git -b lineage-17.1 --depth=1 --no-repo-verify
+          
+          # KRİTİK NOKTA: Kendi depomuzdaki local_manifests dosyalarını .repo altına kopyalıyoruz
+          mkdir -p .repo/local_manifests
+          cp -r $GITHUB_WORKSPACE/local_manifests/* .repo/local_manifests/
+          
+          echo "Yerel manifest kopyalandı, içerik:"
+          ls -la .repo/local_manifests/
+          
+          echo "Repo sync baslatiliyor..."
           repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune
 
       - name: Build ROM for Selected Device
