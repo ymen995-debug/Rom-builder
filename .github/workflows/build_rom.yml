@@ -46,15 +46,15 @@ jobs:
           cd ~/rom
           export PATH=~/bin:$PATH
           
-          # Sadece yetki gerektirmeyen global credential ve url ayarları
           git config --global credential.helper ""
           git config --global url."https://github.com/".insteadOf git://github.com/
           
           echo "Secilen ROM: crdroid"
           
-          # Auth prompt'u engelleyen ve repo çeken init
           GIT_TERMINAL_PROMPT=0 repo init -u https://github.com/crdroidandroid/android_manifest.git -b 10.0 --depth=1 --no-repo-verify
-          repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+          
+          # Ağı yormayan, tekli ve güvenli sync ayarı
+          repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune
 
       - name: Build ROM for Selected Device
         run: |
