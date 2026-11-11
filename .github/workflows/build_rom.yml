@@ -1,7 +1,4 @@
-name: Build crDroid for Huawei MatePad T10s
-
-on:
-  workflow_dispatch:
+workflow_dispatch:
     inputs:
       rom_type:
         description: 'Derlenecek ROM Türü'
@@ -11,6 +8,10 @@ on:
         description: 'Android Sürümü (örn. 10.0)'
         required: true
         default: '10.0'
+      device_brand:
+        description: 'Cihaz Markası (örn. huawei)'
+        required: true
+        default: 'huawei'
       device_codename:
         description: 'Cihaz Kod Adı (örn. agold)'
         required: true
