@@ -60,8 +60,8 @@ jobs:
           chmod a+x ~/bin/repo
           export PATH=~/bin:$PATH
           
-          # Token'lı URL formatı ile repo init
-          repo init -u https://${{ github.event.inputs.github_username }}:${{ github.event.inputs.github_token }}@github.com/LineageOS/android_manifest.git -b lineage-17.1 --depth=1 --no-repo-verify
+          # Global git credentials zaten token'ı tuttuğu için repo init düz URL ile sorunsuz çalışır
+          repo init -u https://github.com/LineageOS/android_manifest.git -b lineage-17.1 --depth=1 --no-repo-verify         
           
           # Yerel manifestleri kopyala
           mkdir -p .repo/local_manifests
