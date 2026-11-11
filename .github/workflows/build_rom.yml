@@ -59,7 +59,7 @@ jobs:
           fi
           
           echo "Manifest URL: $ROM_URL"
-          repo init -u &ROM_URL -b 10.0 --depth=1
+          repo init -u https://github.com/crdroidandroid/android_manifest.git -b 10.0 --depth=1
           repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
       - name: Build ROM for Selected Device
