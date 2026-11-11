@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <manifest>
   <remote name="crdroid" fetch="https://github.com/crdroidandroid" />
-  
+
   <project name="android_vendor_crdroid" path="vendor/crdroid" remote="crdroid" revision="10.0" />
   <project name="android_packages_apps_crDroidSettings" path="packages/apps/crDroidSettings" remote="crdroid" revision="10.0" />
 </manifest>

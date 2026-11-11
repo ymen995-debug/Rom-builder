@@ -40,7 +40,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git repo wget curl python3
 
-      - name: Initialize Base Manifest from Local Repository
+      - name: Initialize Base Manifest Locally
         run: |
           rm -rf ~/rom
           mkdir -p ~/rom
@@ -49,7 +49,7 @@ jobs:
           git config --global user.name "${{ github.event.inputs.github_username }}"
           git config --global user.email "${{ github.event.inputs.github_username }}@debug.local"
           
-          echo "Yerel manifest dosyaları çalışma alanına kopyalanıyor..."
+          echo "Termux'tan ellerimizle hazırladığımız yerel manifestler kopyalanıyor..."
           mkdir -p .repo/manifests
           mkdir -p .repo/local_manifests
           
@@ -62,12 +62,12 @@ jobs:
           chmod a+x ~/bin/repo
           export PATH=~/bin:$PATH
           
-         # Repo init adresine kullanıcı adı ve token'ı doğrudan gömüyoruz
-          repo init -u https://${{ github.event.inputs.github_username }}:${{ github.event.inputs.github_token }}@github.com/LineageOS/android_manifest.git -b lineage-17.1 --depth=1 --no-repo-verify
+          # İnternetten şifre istemeyen, tamamen yerel manifest kullanan init komutu
+          repo init --local-manifests --no-repo-verify
           
           echo "Repo sync baslatiliyor..."
           repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune
-
+         
       - name: Build ROM for Selected Device
         run: |
           cd ~/rom
