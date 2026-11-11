@@ -1,59 +1,39 @@
-name: Build CrDroid for Huawei MatePad T10s
+name: Build crDroid 10 for MatePad T10s
 
 on:
   workflow_dispatch:
-    inputs:
-      rom_type:
-        description: 'Derlenecek ROM Türü'
-        required: true
-        default: 'crdroid'
-      android_version:
-        description: 'Android Sürümü'
-        required: true
-        default: '10'
-      device_brand:
-        description: 'Cihaz Markası'
-        required: true
-        default: 'huawei'
-      device_codename:
-        description: 'Cihaz Kod Adı'
-        required: true
-        default: 'agold'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v2
-
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git repo wget curl
+          sudo apt-get install -y git repo wget curl python3
 
-      - name: Install Google Repo Tool
-        run: |
-          mkdir -p ~/bin
-          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
-          chmod a+x ~/bin/repo
-
-      - name: Initialize and Sync crDroid Manifest
+      - name: Clone Manifest Directly (Bypass Repo Init Auth)
         run: |
           rm -rf ~/rom
-          mkdir -p ~/rom
+          mkdir -p ~/rom/.repo
           cd ~/rom
-          export PATH=~/bin:$PATH
           
+          # Git kimliklerini global olarak temizle ve sabitle
           git config --global credential.helper ""
-          git config --global url."https://github.com/".insteadOf git://github.com/
+          git config --global user.name "kral_eymen219"
+          git config --global user.email "ozmuseymen995@gmail.com"
           
-          echo "Secilen ROM: crdroid"
+          echo "Manifest dorudan klonlaniyor..."
           
-          # HTTPS auth duvarını bypas eden auth-free URL formatı
-          GIT_TERMINAL_PROMPT=0 repo init -u https://github.com/crdroidandroid/android_manifest.git -b 10.0 --depth=1 --no-repo-verify --repo-url=https://gerrit.googlesource.com/git-repo
+          # repo init kullanmadan, doğrudan manifest reposunu klonluyoruz
+          git clone https://github.com/crdroidandroid/android_manifest.git -b 10.0 --depth=1 .repo/manifests
           
+          # Default manifest bağlantısını ayarlıyoruz
+          mkdir -p .repo/manifests.git
+          ln -s ../manifests/.git .repo/manifests.git/refs
+          ln -s manifests/default.xml .repo/manifest.xml
+          
+          echo "Manifest baglantisi kuruldu, sync baslatiliyor..."
           repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune
 
       - name: Build ROM for Selected Device
@@ -61,7 +41,5 @@ jobs:
           cd ~/rom
           export PATH=~/bin:$PATH
           source build/envsetup.sh
-          echo "Secilen cihaz kod adina gore lunch komutu"
-          echo "Derleme baslatiliyor: ${{ github.event.inputs.device_codename }}"
-          lunch lineage_${{ github.event.inputs.device_codename }}-userdebug
+          lunch lineage_agold-userdebug
           mka bacon -j$(nproc --all)
