@@ -4,56 +4,64 @@ on:
   workflow_dispatch:
     inputs:
       rom_type:
-        description: 'Derlenecek ROM Türü (crdroid, lineage, vb.)'
+        description: 'Derlenecek ROM Türü'
         required: true
         default: 'crdroid'
       android_version:
         description: 'Android Sürümü (örn. 10.0)'
         required: true
         default: '10.0'
-      device_brand:
-        description: 'Cihaz Markası (örn. huawei)'
-        required: true
-        default: 'huawei'
       device_codename:
         description: 'Cihaz Kod Adı (örn. agold)'
         required: true
         default: 'agold'
+      github_username:
+        description: 'GitHub Kullanıcı Adın'
+        required: true
+        default: 'kral_eymen219'
+      github_token:
+        description: 'GitHub Personal Access Token (PAT)'
+        required: true
+        default: ''
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Repository (Our Local Manifests)
+        uses: actions/checkout@v4
+
       - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y git repo wget curl python3
 
-      - name: Initialize Base Manifest and Copy Local Manifests
+      - name: Initialize Base Manifest with Token & Copy Local Manifests
         run: |
           rm -rf ~/rom
           mkdir -p ~/rom
           cd ~/rom
           
-          git config --global credential.helper ""
-          git config --global user.name "kral_eymen219"
-          git config --global user.email "ymen995@debug.local"
+          # Kullanıcı adı ve token ile global credential ayarlarını mühürlüyoruz
+          git config --global user.name "${{ github.event.inputs.github_username }}"
+          git config --global user.email "${{ github.event.inputs.github_username }}@debug.local"
           
-          echo "Ana LineageOS 17.1 (Android 10) Manifesti Kuruluyor..."
+          # Token'ı git credential helper'a gömüyoruz ki repo init ve sync esnasında asla şifre sormasın
+          git config --global credential.helper store
+          echo "https://${{ github.event.inputs.github_username }}:${{ github.event.inputs.github_token }}@github.com" > ~/.git-credentials
+          
+          echo "Token destekli LineageOS manifesti init ediliyor..."
           mkdir -p ~/bin
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
           chmod a+x ~/bin/repo
           export PATH=~/bin:$PATH
           
-          # Sağlam Lineage manifestini init et
-          repo init -u https://github.com/LineageOS/android_manifest.git -b lineage-17.1 --depth=1 --no-repo-verify
+          # Token'lı URL formatı ile repo init
+          repo init -u https://${{ github.event.inputs.github_username }}:${{ github.event.inputs.github_token }}@github.com/LineageOS/android_manifest.git -b lineage-17.1 --depth=1 --no-repo-verify
           
-          # KRİTİK NOKTA: Kendi depomuzdaki local_manifests dosyalarını .repo altına kopyalıyoruz
+          # Yerel manifestleri kopyala
           mkdir -p .repo/local_manifests
           cp -r $GITHUB_WORKSPACE/local_manifests/* .repo/local_manifests/
-          
-          echo "Yerel manifest kopyalandı, içerik:"
-          ls -la .repo/local_manifests/
           
           echo "Repo sync baslatiliyor..."
           repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune
