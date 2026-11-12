@@ -59,13 +59,7 @@ jobs:
 
       - name: Build ROM for Selected Device
         run: |
-          cd $GITHUB_WORKSPACE
-          
-          # Eğer envsetup.sh yoksa veya dizin kayıpsa doğrudan kökten çağırıyoruz
-          if [ ! -f "build/envsetup.sh" ]; then
-            echo "envsetup.sh bulunamadı, manuel olarak tetikleniyor..."
-          fi
-          
+          cd /home/runner/rom
           source build/envsetup.sh
           export ALLOW_MISSING_DEPENDENCIES=true
           lunch crdroid_agold-userdebug
