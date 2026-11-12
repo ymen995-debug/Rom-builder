@@ -42,16 +42,14 @@ jobs:
 
       - name: Initialize crDroid Workspace & Clone Trees
         run: |
+          mkdir -p /home/runner/rom
           cd /home/runner/rom
-          # crDroid kaynak kodlarını senin manifest dosyalarınla senkronize et
+          
           repo init -u https://github.com/crdroidandroid/android.github.com -b 13.0 --git-lfs
-          # Eğer özel XML dosyalarını lokal manifest olarak kullanacaksan .repo/local_manifests/ altına atıyoruz:
           mkdir -p .repo/local_manifests
-          # (Varsa default.xml veya crdroid.xml dosyalarını buraya kopyalayabilirsin)
           
           repo sync -c -j8 --force-sync --no-clone-bundle --no-tags
           
-          # Oppo A16 Device ve Vendor ağaçlarını yerlerine çekiyoruz
           rm -rf device/oplus/CPH2269 vendor/oplus/CPH2269
           git clone https://github.com/ksauraj/A16.git -b 12-CPH2269_11_A.01 device/oplus/CPH2269
           git clone https://github.com/autoandroida/vendor_oplus_CPH2269.git vendor/oplus/CPH2269
