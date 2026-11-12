@@ -1,4 +1,4 @@
-name: Build crDroid for Huawei MatePad T10s
+name: Build crDroid for Oppo A16
 
 on:
   workflow_dispatch:
@@ -8,17 +8,17 @@ on:
         required: true
         default: 'crdroid'
       android_version:
-        description: 'Android Sürümü (örn. 10.0)'
+        description: 'Android Sürümü (örn. 13.0)'
         required: true
-        default: '10.0'
+        default: '13.0'
       device_brand:
-        description: 'Cihaz Markası (örn. huawei)'
+        description: 'Cihaz Markası (örn. oppo)'
         required: true
-        default: 'huawei'
+        default: 'oppo'
       device_codename:
-        description: 'Cihaz Kod Adı (örn. agold)'
+        description: 'Cihaz Kod Adı (örn. CPH2269)'
         required: true
-        default: 'agold'
+        default: 'CPH2269'
       github_username:
         description: 'GitHub Kullanıcı Adın'
         required: true
@@ -40,33 +40,45 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git repo wget curl python3
 
-      - name: Initialize crDroid Workspace & Clone Trees
+      - name: Initialize Base Manifest Locally
         run: |
-          mkdir -p /home/runner/rom
-          cd /home/runner/rom
-          
-          repo init -u https://github.com/crdroidandroid/android.github.com -b 13.0 --git-lfs
-          mkdir -p .repo/local_manifests
-          
-          repo sync -c -j8 --force-sync --no-clone-bundle --no-tags
-          
+          rm -rf ~/rom
+          mkdir -p ~/rom
+          cd ~/rom
+
+          git config --global user.name "${{ github.event.inputs.github_username }}"
+          git config --global user.email "${{ github.event.inputs.github_username }}@debug.local"
+
+          echo "Repo aracı kuruluyor..."
+          mkdir -p ~/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+x ~/bin/repo
+          export PATH=~/bin:$PATH
+
+          echo "Repo sync baslatiliyor..."
+          repo init -u https://github.com/crdroidandroid/android.github.com -b ${{ github.event.inputs.android_version }} --no-repo-verify --depth=1
+          repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune --force-sync
+
+      - name: Clone Oppo A16 ROM Device & Vendor Trees
+        run: |
+          cd ~/rom
           rm -rf device/oplus/CPH2269 vendor/oplus/CPH2269
           git clone https://github.com/ksauraj/A16.git -b 12-CPH2269_11_A.01 device/oplus/CPH2269
           git clone https://github.com/autoandroida/vendor_oplus_CPH2269.git vendor/oplus/CPH2269
 
       - name: Adapt Device Tree for crDroid
         run: |
-          cd /home/runner/rom/device/oplus/CPH2269
+          cd ~/rom/device/oplus/CPH2269
           if [ -f lineage_CPH2269.mk ]; then
             mv lineage_CPH2269.mk crdroid_CPH2269.mk
             sed -i 's/lineage_CPH2269/crdroid_CPH2269/g' AndroidProducts.mk crdroid_CPH2269.mk
             sed -i 's|vendor/lineage/config/common_full_phone.mk|vendor/crdroid/config/common_full_phone.mk|g' crdroid_CPH2269.mk
           fi
 
-      - name: Build crDroid for Oppo A16
+      - name: Build ROM for Selected Device
         run: |
-          cd /home/runner/rom
+          cd ~/rom
           source build/envsetup.sh
           export ALLOW_MISSING_DEPENDENCIES=true
           lunch crdroid_CPH2269-userdebug
-          mka bacon
+          mka bacon showcommands=true V=1 || (echo "BUILD FAILED MAN" && exit 1)
