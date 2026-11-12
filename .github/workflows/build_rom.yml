@@ -59,8 +59,4 @@ jobs:
 
       - name: Build ROM for Selected Device
         run: |
-          cd ~/rom
-          source build/envsetup.sh
-          export ALLOW_MISSING_DEPENDENCIES=true
-          lunch crdroid_agold-userdebug
-          mka bacon showcommands=true V=1 || { echo "BUILD FAILED MAN"; exit 1; }
+          cd $GITHUB_WORKSPACE && source build/envsetup.sh && export ALLOW_MISSING_DEPENDENCIES=true && lunch crdroid_agold-userdebug && mka bacon showcommands=true V=1 || { echo "BUILD FAILED MAN"; exit 1; }
