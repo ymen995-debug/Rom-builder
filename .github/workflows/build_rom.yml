@@ -85,5 +85,5 @@ jobs:
           cd ~/rom
           source build/envsetup.sh
           export ALLOW_MISSING_DEPENDENCIES=true
-          lunch crdroid_CPH2269-userdebug
+          lunch Lineage_CPH2269-userdebug || lunch crdroid_CPH2269-userdebug
           mka bacon showcommands=true V=1 || (echo "BUILD FAILED MAN" && exit 1)
