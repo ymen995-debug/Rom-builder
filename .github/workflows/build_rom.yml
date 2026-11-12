@@ -73,16 +73,15 @@ jobs:
       - name: Adapt Device Tree for crDroid
         run: |
           cd ~/rom/device_oppo_CPH2269
-          ls -la
-          # Eğer dosya lineage_ ile başlıyorsa taşıyacağız, yoksa es gececeğiz veya olan dosyayı uyarlayacağız
+          # Klasördeki ana .mk dosyasını bulup crDroid'e uyarlayalım
           for f in *.mk; do
-            if [[ "$f" == lineage_* ]]; then
-              newname="${f//lineage_/crdroid_}"
-              mv "$f" "$newname"
-              sed -i 's/lineage_CPH2269/crdroid_CPH2269/g' "$newname"
-              sed -i 's|vendor/lineage/config/common_full_phone.mk|vendor/crdroid/config/common.mk|g' "$newname"
+            if [[ "$f" != "AndroidProducts.mk" ]]; then
+              sed -i 's/lineage/crdroid/g' "$f"
+              sed -i 's|vendor/lineage/config/common_full_phone.mk|vendor/crdroid/config/common.mk|g' "$f"
             fi
           done
+         # Eğer lineage adıyla geçen başka dosya varsa onları da crDroid yapalım
+         rename 's/lineage/crdroid/' * 2>/dev/null || tru
 
       - name: Build ROM for Selected Device
         run: |
