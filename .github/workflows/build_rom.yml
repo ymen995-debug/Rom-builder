@@ -81,7 +81,7 @@ jobs:
             fi
           done
          # Eğer lineage adıyla geçen başka dosya varsa onları da crDroid yapalım
-         rename 's/lineage/crdroid/' * 2>/dev/null || tru
+         rename 's/lineage/crdroid/' * 2>/dev/null || true
 
       - name: Build ROM for Selected Device
         run: |
