@@ -83,6 +83,12 @@ jobs:
       - name: Build ROM for Selected Device
         run: |
           set -e
+          pwd
+          ls -la
+          # Eğer rom klasörü içerisindeysek doğrudan devam et, değilse gir
+          if [ -d "rom" ]; then
+            cd rom
+          fi
           source build/envsetup.sh
           export ALLOW_MISSING_DEPENDENCIES=true
           lunch Lineage_CPH2269-userdebug || lunch crdroid_CPH2269-userdebug
