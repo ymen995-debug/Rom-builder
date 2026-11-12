@@ -67,7 +67,7 @@ jobs:
         run: |
           cd ~/rom
           rm -rf device/oplus/CPH2269 vendor/oplus/CPH2269
-          git clone https://github.com/ksauraj/A16.git -b 12-CPH2269_11_A.01 device/oplus/CPH2269
+          git clone https://github.com/secr5t/device_oppo_CPH2269.git
           git clone https://github.com/autoandroida/vendor_oplus_CPH2269.git vendor/oplus/CPH2269
 
       - name: Adapt Device Tree for crDroid
