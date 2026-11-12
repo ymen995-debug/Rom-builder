@@ -59,8 +59,8 @@ jobs:
           chmod a+x ~/bin/repo
           export PATH=~/bin:$PATH
 
-          echo "Repo sync baslatiliyor (Android 11)..."
-          repo init -u https://github.com/crdroidandroid/android.github.com -b 11.0 --no-repo-verify --depth=1
+          echo "Repo sync baslatiliyor (crDroid 11)..."
+          repo init -u https://github.com/crdroidandroid/android.git -b 11.0 --no-repo-verify --depth=1
           repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune --force-syn
 
       - name: Clone Oppo A16 ROM Device & Vendor Trees
