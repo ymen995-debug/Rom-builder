@@ -48,6 +48,10 @@ jobs:
 
           git config --global user.name "${{ github.event.inputs.github_username }}"
           git config --global user.email "${{ github.event.inputs.github_username }}@debug.local"
+          
+          # Token'ı git credential sistemine kaydederek auth duvarını aşıyoruz
+          git config --global credential.helper store
+          echo "https://${{ github.event.inputs.github_username }}:${{ github.event.inputs.github_token }}@github.com" > ~/.git-credentials
 
           echo "Repo aracı kuruluyor..."
           mkdir -p ~/bin
@@ -55,9 +59,9 @@ jobs:
           chmod a+x ~/bin/repo
           export PATH=~/bin:$PATH
 
-          echo "Repo sync baslatiliyor..."
-          repo init -u https://github.com/crdroidandroid/android.github.com -b ${{ github.event.inputs.android_version }} --no-repo-verify --depth=1
-          repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune --force-sync
+          echo "Repo sync baslatiliyor (Android 11)..."
+          repo init -u https://github.com/crdroidandroid/android.github.com -b 11.0 --no-repo-verify --depth=1
+          repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune --force-syn
 
       - name: Clone Oppo A16 ROM Device & Vendor Trees
         run: |
