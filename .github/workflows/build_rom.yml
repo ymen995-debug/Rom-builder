@@ -60,7 +60,7 @@ jobs:
       - name: Build ROM for Selected Device
         run: |
           cd /home/runner/rom
-          source build/envsetup.sh
+          source build/envsetup.sh || true
           export ALLOW_MISSING_DEPENDENCIES=true
           lunch crdroid_agold-userdebug
           mka bacon showcommands=true V=1
