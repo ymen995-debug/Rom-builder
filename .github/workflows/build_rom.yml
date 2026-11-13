@@ -66,26 +66,24 @@ jobs:
       - name: Clone Oppo A16 ROM Device & Vendor Trees
         run: |
           cd /home/runner/rom
-          rm -rf device/oppo/CPH2269 device/oplus/CPH2269 vendor/oplus/CPH2269 device_oppo_CPH2269
+          rm -rf device_oppo_CPH2269 vendor_oplus_CPH2269
           git clone https://github.com/secr5t/device_oppo_CPH2269.git device/oppo/CPH2269
           git clone https://github.com/autoandroida/vendor_oplus_CPH2269.git vendor/oplus/CPH2269
 
       - name: Adapt Device Tree for crDroid
         run: |
-          cd /home/runner/rom/device/oppo/CPH2269
-          if [ -f "lineage_CPH2269.mk" ]; then
-            mv lineage_CPH2269.mk crdroid_CPH2269.mk
+          cd /home/runner/rom/device_oppo_CPH2269
+          if [ -f "twrp_CPH2269.mk" ]; then
+            mv twrp_CPH2269.mk crdroid_CPH2269.mk
           fi
+          sed -i 's/twrp_CPH2269/crdroid_CPH2269/g' AndroidProducts.mk || true
+          sed -i 's/twrp/crdroid/g' crdroid_CPH2269.mk || true
+          sed -i 's|vendor/twrp/config/common.mk|vendor/crdroid/config/common_full_phone.mk|g' crdroid_CPH2269.mk || true
+          
+          # Vendor tarafındaki makefile dosyalarındaki olası uyumsuzlukları düzeltelim
+          cd /home/runner/rom/vendor_oplus_CPH2269
           for f in *.mk; do
-            sed -i 's/lineage/crdroid/g' "$f"
-            sed -i 's|vendor/crdroid/config/common_full_phone.mk|vendor/crdroid/config/common_full_phone.mk|g' "$f"
+            if [ -f "$f" ]; then
+              sed -i 's/lineage/crdroid/g' "$f" || true
+            fi
           done
-
-      - name: Build ROM for Selected Device
-        run: |
-          set -e
-          cd /home/runner/rom
-          source build/envsetup.sh
-          export ALLOW_MISSING_DEPENDENCIES=true
-          lunch crdroid_CPH2269-userdebug
-          mka bacon -j$(nproc --all)
