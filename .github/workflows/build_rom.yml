@@ -65,36 +65,27 @@ jobs:
 
       - name: Clone Oppo A16 ROM Device & Vendor Trees
         run: |
-          cd ~/rom
-          rm -rf device/oplus/CPH2269 vendor/oplus/CPH2269
-          git clone https://github.com/secr5t/device_oppo_CPH2269.git
+          cd /home/runner/rom
+          rm -rf device/oppo/CPH2269 device/oplus/CPH2269 vendor/oplus/CPH2269 device_oppo_CPH2269
+          git clone https://github.com/secr5t/device_oppo_CPH2269.git device/oppo/CPH2269
           git clone https://github.com/autoandroida/vendor_oplus_CPH2269.git vendor/oplus/CPH2269
 
       - name: Adapt Device Tree for crDroid
         run: |
-          cd ~/rom/device_oppo_CPH2269
+          cd /home/runner/rom/device/oppo/CPH2269
+          if [ -f "lineage_CPH2269.mk" ]; then
+            mv lineage_CPH2269.mk crdroid_CPH2269.mk
+          fi
           for f in *.mk; do
-            if [[ "$f" != "AndroidProducts.mk" ]]; then
-              sed -i 's/lineage/crdroid/g' "$f"
-              sed -i 's|vendor/lineage/config/common_full_phone.mk|vendor/crdroid/config/common.mk|g' "$f"
-            fi
+            sed -i 's/lineage/crdroid/g' "$f"
+            sed -i 's|vendor/crdroid/config/common_full_phone.mk|vendor/crdroid/config/common_full_phone.mk|g' "$f"
           done
 
       - name: Build ROM for Selected Device
         run: |
           set -e
-          # Tek satırda, hataya yer bırakmayacak şekilde net dizin geçişi
-          cd /home/runner/rom || cd rom
-          
-          pwd
-          ls -la
-          
-          if [ ! -f "build/envsetup.sh" ]; then
-            echo "HATA: build/envsetup.sh bulunamadı!"
-            exit 1
-          fi
-
+          cd /home/runner/rom
           source build/envsetup.sh
           export ALLOW_MISSING_DEPENDENCIES=true
-          lunch Lineage_CPH2269-userdebug || lunch crdroid_CPH2269-userdebug
-          mka bacon showcommands=true V=1
+          lunch crdroid_CPH2269-userdebug
+          mka bacon -j$(nproc --all)
