@@ -83,14 +83,14 @@ jobs:
       - name: Build ROM for Selected Device
         run: |
           set -e
-          # Doğrudan repo sync'in dosyaları attığı ana rom klasörüne zıplıyoruz
-          cd ~/rom  cd /home/runner/rom  cd rom
+          # Tek satırda, hataya yer bırakmayacak şekilde net dizin geçişi
+          cd /home/runner/rom || cd rom
           
           pwd
           ls -la
           
           if [ ! -f "build/envsetup.sh" ]; then
-            echo "HATA: build/envsetup.sh hala burada yok!"
+            echo "HATA: build/envsetup.sh bulunamadı!"
             exit 1
           fi
 
