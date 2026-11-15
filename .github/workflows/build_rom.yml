@@ -101,6 +101,6 @@ jobs:
       
           cd rom-repo
           git checkout -b main || git checkout main
-          git add *.zip
+          git add Crdroid.zip
           git commit -m "CRDroid CPH2269 Build - Otomatik Yükleme"
-          git push -u https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ymen995-debug/cph2269-crdroid-releases.git main --force
+          git push -u https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ymen995-debug/cph2269-crdroid-releases.git origin main --force
