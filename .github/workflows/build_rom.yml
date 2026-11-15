@@ -1,107 +1,285 @@
-name: OS ROM Compiler
+name: ROM Builder (Otomatik Cihaz Bulucu)
+
+# Kullanim: Actions -> "ROM Builder" -> Run workflow -> formu doldur.
+# Workflow cihazin device/vendor/kernel agaclarini GitHub'da kendisi arar, kaynaklari indirir,
+# ROM'u GitHub sunucularinda derler ve sonucu bu reponun "Releases" bolumune yukler.
 
 on:
   workflow_dispatch:
     inputs:
       rom_type:
-        description: 'Derlenecek ROM Türü'
+        description: 'ROM turu'
+        required: true
+        type: choice
+        default: 'crDroid'
+        options: [crDroid, LineageOS]
+      android_version:
+        description: 'Android surumu'
+        required: true
+        type: choice
+        default: '11'
+        options: ['11', '12', '13', '14']
+      github_username:
+        description: 'GitHub kullanici adin (once senin repolarina bakilir)'
         required: true
         default: ''
-      android_version:
-        description: 'Android Sürümü (örn. 13.0)'
-        required: true
-        default: '11.0'
       device_brand:
-        description: 'Cihaz Markası (örn. Huawei)'
+        description: 'Cihaz markasi (orn. Oppo)'
         required: true
         default: ''
       device_codename:
-        description: 'Cihaz Kod Adı (örn. agold)'
+        description: 'Cihaz kod adi (orn. CPH2269)'
         required: true
         default: ''
-      github_username:
-        description: 'GitHub Kullanıcı Adın'
+      device_model:
+        description: 'Cihaz modeli (orn. A16)'
         required: true
         default: ''
-      github_token:
-        description: 'GitHub Personal Access Classic Token (PAT)'
-        required: true
+      serial_number:
+        description: 'Seri no (OPSIYONEL, derlemede kullanilmaz, herkese acik gorunur: bos birak!)'
+        required: false
         default: ''
+      country_code:
+        description: 'Ulke kodu (orn. TR)'
+        required: true
+        default: 'TR'
+      device_tree_override:
+        description: 'Opsiyonel: elle device tree (kullanici/repo@dal). Bos = otomatik ara'
+        required: false
+        default: ''
+      try_recovery_tree:
+        description: 'Sadece TWRP/recovery agaci bulunursa yine de dene (cogunlukla basarisiz olur)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  ROM_DIR: /home/runner/rom
 
 jobs:
-  build:
+  # ---------------------------------------------------------------------------------------
+  # 1) Ucuz ve hizli: cihaza ozel agaclari bul. Bulamazsa pahali derleme hic baslamaz.
+  # ---------------------------------------------------------------------------------------
+  discover:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      plan: ${{ steps.find.outputs.plan }}
+      rom_url: ${{ steps.rom.outputs.url }}
+      rom_branch: ${{ steps.rom.outputs.branch }}
     steps:
-      - name: Checkout Repository (Our Local Manifests)
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install Dependencies
+      - name: Girdileri dogrula
+        env:
+          BRAND: ${{ inputs.device_brand }}
+          CODENAME: ${{ inputs.device_codename }}
+          MODEL: ${{ inputs.device_model }}
+          COUNTRY: ${{ inputs.country_code }}
+          GHUSER: ${{ inputs.github_username }}
+        run: |
+          chk() { [[ "$2" =~ ^[A-Za-z0-9._\ -]{1,64}$ ]] || { echo "::error::'$1' gecersiz karakter iceriyor"; exit 1; }; }
+          chk "marka" "$BRAND"; chk "kod adi" "$CODENAME"; chk "model" "$MODEL"
+          chk "ulke kodu" "$COUNTRY"; chk "kullanici adi" "$GHUSER"
+
+      - name: ROM kaynagini ve dalini sec
+        id: rom
+        env:
+          ROM: ${{ inputs.rom_type }}
+          AV: ${{ inputs.android_version }}
+        run: |
+          case "$ROM" in
+            crDroid)
+              URL=https://github.com/crdroidandroid/android.git
+              case "$AV" in 11) BR=11.0;; 12) BR=12.1;; 13) BR=13.0;; 14) BR=14.0;; esac ;;
+            LineageOS)
+              URL=https://github.com/LineageOS/android.git
+              case "$AV" in 11) BR=lineage-18.1;; 12) BR=lineage-19.1;; 13) BR=lineage-20.0;; 14) BR=lineage-21.0;; esac ;;
+          esac
+          if ! git ls-remote --exit-code --heads "$URL" "$BR" >/dev/null; then
+            echo "::error::$ROM icin Android $AV dali ($BR) yok. Baska bir surum secin."; exit 1
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"; echo "branch=$BR" >> "$GITHUB_OUTPUT"
+
+      - name: Device / vendor / kernel agaclarini ara
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRAND: ${{ inputs.device_brand }}
+          CODENAME: ${{ inputs.device_codename }}
+          MODEL: ${{ inputs.device_model }}
+          COUNTRY: ${{ inputs.country_code }}
+          GHUSER: ${{ inputs.github_username }}
+          AV: ${{ inputs.android_version }}
+          ROM: ${{ inputs.rom_type }}
+          OVERRIDE: ${{ inputs.device_tree_override }}
+          RECOVERY_OK: ${{ inputs.try_recovery_tree }}
+        run: |
+          ARGS=(--brand "$BRAND" --codename "$CODENAME" --model "$MODEL" --country "$COUNTRY"
+                --user "$GHUSER" --android "$AV" --rom "$ROM" --out plan.json)
+          [ -n "$OVERRIDE" ] && ARGS+=(--device-override "$OVERRIDE")
+          [ "$RECOVERY_OK" = "true" ] && ARGS+=(--allow-recovery)
+          python3 scripts/find_device_trees.py "${ARGS[@]}"
+          jq -e 'length > 0' plan.json >/dev/null
+          echo "plan=$(jq -c . plan.json)" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------------------
+  # 2) Derleme. Hizli runner icin repo ayarlarinda RUNNER_LABEL degiskenine buyuk runner
+  #    etiketi yaz (Settings -> Secrets and variables -> Actions -> Variables).
+  # ---------------------------------------------------------------------------------------
+  build:
+    needs: discover
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-22.04' }}
+    timeout-minutes: 355
+    permissions:
+      contents: write   # Release yuklemek icin
+    steps:
+      - name: Disk alani ac ve swap ekle
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache \
+                      /usr/local/share/boost /usr/share/swift /opt/microsoft /opt/az \
+                      /usr/local/.ghcup /usr/local/lib/node_modules || true
+          sudo docker image prune -af || true
+          df -h /
+          if [ "$(free -g | awk '/Mem/{print $2}')" -lt 32 ]; then
+            sudo swapoff -a || true
+            sudo fallocate -l 16G /swapfile && sudo chmod 600 /swapfile
+            sudo mkswap /swapfile && sudo swapon /swapfile
+          fi
+          free -h; nproc
+
+      - name: Derleme bagimliliklari
         run: |
           sudo apt-get update
-          sudo apt-get install -y git repo wget curl python3
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs \
+            gnupg gperf imagemagick jq lib32ncurses5-dev lib32readline-dev lib32z1-dev \
+            libelf-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev \
+            libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc \
+            zip zlib1g-dev unzip python3 python-is-python3 openjdk-11-jdk-headless \
+            lz4 xz-utils zstd cpio libtinfo5 libgl1-mesa-dev
+          sudo curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo -o /usr/local/bin/repo
+          sudo chmod a+x /usr/local/bin/repo
+          git lfs install
+          git config --global user.name  "${GITHUB_ACTOR}"
+          git config --global user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+          git config --global color.ui false
 
-      - name: Initialize Base Manifest Locally
+      - name: ROM kaynak kodunu indir
+        env:
+          ROM_URL: ${{ needs.discover.outputs.rom_url }}
+          ROM_BRANCH: ${{ needs.discover.outputs.rom_branch }}
         run: |
-          rm -rf ~/rom
-          mkdir -p ~/rom
-          cd ~/rom
+          mkdir -p "$ROM_DIR" && cd "$ROM_DIR"
+          repo init -u "$ROM_URL" -b "$ROM_BRANCH" --git-lfs --depth=1 --no-repo-verify
+          for i in 1 2 3; do
+            repo sync -c -j"$(( $(nproc) * 2 ))" --no-clone-bundle --no-tags --optimized-fetch \
+              --prune --force-sync && break
+            echo "Sync basarisiz, tekrar ($i/3)"; sleep 20
+          done
+          df -h /
 
-          git config --global user.name "${{ github.event.inputs.github_username }}"
-          git config --global user.email "${{ github.event.inputs.github_username }}@debug.local"
-
-          # Token'ı git credential sistemine kaydederek auth duvarını aşıyoruz
-          git config --global credential.helper store
-          echo "https://${{ github.event.inputs.github_username }}:${{ github.event.inputs.github_token }}@github.com" > ~/.git-credentials
-
-          echo "Repo aracı kuruluyor..."
-          mkdir -p ~/bin
-          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
-          chmod a+x ~/bin/repo
-          export PATH=~/bin:$PATH
-
-          echo "Repo sync baslatiliyor (crDroid 11)..."
-          repo init -u https://github.com/crdroidandroid/android.git -b 11.0 --no-repo-verify --depth=1
-          repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune --force-syn
-
-      - name: Create Device Tree Directories
+      - name: Bulunan cihaz agaclarini indir
+        env:
+          PLAN: ${{ needs.discover.outputs.plan }}
         run: |
-          cd /home/runner/rom
-          mkdir -p device/oppo/CPH2269
-          mkdir -p vendor/oplus/CPH2269
+          cd "$ROM_DIR"
+          echo "$PLAN" | jq -c '.[]' | while read -r item; do
+            url=$(jq -r .url <<<"$item"); br=$(jq -r .branch <<<"$item"); path=$(jq -r .path <<<"$item")
+            [[ "$path" =~ ^[A-Za-z0-9_][A-Za-z0-9_./+-]*$ && "$path" != *..* ]] || { echo "::error::guvensiz yol: $path"; exit 1; }
+            echo ">> $url ($br) -> $path"
+            rm -rf "$path"; mkdir -p "$(dirname "$path")"
+            git clone --depth=1 -b "$br" "$url" "$path"
+          done
 
-      - name: Clone Oppo A16 ROM Device & Vendor Trees
+      - name: Urun dosyasini ROM icin hazirla
+        env:
+          CODENAME: ${{ inputs.device_codename }}
+          PLAN: ${{ needs.discover.outputs.plan }}
         run: |
-          cd /home/runner/rom
-          rm -rf device_oppo_CPH2269 vendor_oplus_CPH2269
-          git clone https://github.com/secr5t/device_oppo_CPH2269.git device/oppo/CPH2269
-          git clone https://github.com/autoandroida/vendor_oplus_CPH2269.git vendor/oplus/CPH2269
-
-      - name: Adapt Device Tree for crDroid
-        run: |
-          cd /home/runner/rom/device/oppo/CPH2269
-          if [ -f "twrp_CPH2269.mk" ]; then
-            mv twrp_CPH2269.mk crdroid_CPH2269.mk
+          cd "$ROM_DIR"
+          DEV=$(jq -r '[.[]|select(.role=="device")][0].path' <<<"$PLAN")
+          cd "$DEV"
+          if grep -lE 'vendor/(lineage|crdroid)/config' *.mk >/dev/null 2>&1; then
+            echo "ROM urun dosyasi mevcut."; exit 0
           fi
-          sed -i 's/twrp_CPH2269/crdroid_CPH2269/g' AndroidProducts.mk || true
-          sed -i 's/twrp_CPH2269/crdroid/g' crdroid_CPH2269.mk || true
-          sed -i 's|vendor/twrp/config/common.mk|vendor/crdroid/config/common.mk|g' crdroid_CPH2269.mk || true
+          SRC=$(ls twrp_*.mk omni_*.mk fox_*.mk 2>/dev/null | head -n1 || true)
+          [ -z "$SRC" ] && { echo "::warning::ROM urun dosyasi bulunamadi, lunch basarisiz olabilir."; exit 0; }
+          DST="lineage_${CODENAME}.mk"
+          cp "$SRC" "$DST"
+          sed -i -E -e "s#^PRODUCT_NAME[[:space:]]*:=.*#PRODUCT_NAME := lineage_${CODENAME}#" \
+            -e 's#\$\(call inherit-product,.*(twrp|omni|fox)/.*\)#$(call inherit-product, vendor/lineage/config/common_full_phone.mk)#' "$DST"
+          grep -q 'vendor/lineage/config' "$DST" || \
+            echo '$(call inherit-product, vendor/lineage/config/common_full_phone.mk)' >> "$DST"
+          printf 'PRODUCT_MAKEFILES := $(LOCAL_DIR)/%s\nCOMMON_LUNCH_CHOICES := lineage_%s-userdebug\n' "$DST" "$CODENAME" > AndroidProducts.mk
+          cat "$DST"
 
-      - name: Upload ROM to GitHub Repository
+      - name: Derle
+        env:
+          CODENAME: ${{ inputs.device_codename }}
+          PLAN: ${{ needs.discover.outputs.plan }}
         run: |
-          git config --global user.name "ymen995-debug"
-          git config --global user.email "ozmuseymen995@gmail.com"
-    
-          # rom-repo klasörünün içine ROM zip dosyasının kopyalandığından emin oluyoruz
-          cp out/target/product/cph2269/*.zip rom-repo/ || true
-    
-          cd /home/runner/rom
-          ls -la
-          cd /home/runner/rom/rom-repo
-          ls -la
-          cd
-          cd /home/runner/rom
-          ls -la
-          cd rom-repo
-          git add .
-          git diff --cached --quiet || git commit -m "Upload crDroid ROM for CPH2269"
-          git push origin main --force
+          cd "$ROM_DIR"
+          export USE_CCACHE=1 CCACHE_EXEC=/usr/bin/ccache CCACHE_DIR="$HOME/.ccache"
+          ccache -M 20G
+          export LC_ALL=C ALLOW_MISSING_DEPENDENCIES=true _JAVA_OPTIONS="-Xmx6g"
+          export BUILD_USERNAME="$GITHUB_ACTOR" BUILD_HOSTNAME=github-actions
+
+          DEV=$(jq -r '[.[]|select(.role=="device")][0].path' <<<"$PLAN")
+          PN=$(grep -hE '^PRODUCT_NAME[[:space:]]*:=' "$DEV"/*.mk | grep -i "$CODENAME" | head -n1 \
+               | sed -E 's/.*:=[[:space:]]*//; s/[[:space:]]+$//' || true)
+          [ -z "$PN" ] && PN="lineage_${CODENAME}"
+          TARGET="${PN}-userdebug"
+          echo "Lunch hedefi: $TARGET"
+
+          set +e
+          source build/envsetup.sh
+          lunch "$TARGET" || { echo "::error::lunch basarisiz ($TARGET): device tree bu ROM ile uyumsuz."; exit 1; }
+          set -e
+          mka bacon -j"$(nproc)" 2>&1 | tee "$ROM_DIR/build.log"
+
+      - name: Cikti dosyalarini topla
+        id: out
+        run: |
+          cd "$ROM_DIR"; mkdir -p "$HOME/upload"
+          ZIP=$(find out/target/product -maxdepth 2 -name '*.zip' -size +200M \
+                  ! -name '*target_files*' ! -name '*symbols*' | head -n1)
+          [ -z "$ZIP" ] && { echo "::error::ROM zip bulunamadi"; exit 1; }
+          cp "$ZIP" "$HOME/upload/"
+          for f in boot.img recovery.img vendor_boot.img dtbo.img; do
+            [ -f "$(dirname "$ZIP")/$f" ] && cp "$(dirname "$ZIP")/$f" "$HOME/upload/" || true
+          done
+          (cd "$HOME/upload" && sha256sum * > SHA256SUMS.txt && ls -lh)
+          echo "zip=$(basename "$ZIP")" >> "$GITHUB_OUTPUT"
+
+      - name: Release olarak yukle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODENAME: ${{ inputs.device_codename }}
+          BRAND: ${{ inputs.device_brand }}
+          MODEL: ${{ inputs.device_model }}
+          COUNTRY: ${{ inputs.country_code }}
+          ROMT: ${{ inputs.rom_type }}
+          AV: ${{ inputs.android_version }}
+          ZIPNAME: ${{ steps.out.outputs.zip }}
+        run: |
+          TAG="${CODENAME}-A${AV}-$(date +%Y%m%d-%H%M)"
+          gh release create "$TAG" "$HOME"/upload/* --repo "$GITHUB_REPOSITORY" \
+            --title "$ROMT A$AV - $BRAND $MODEL ($CODENAME) [$COUNTRY]" \
+            --notes "Otomatik derleme: $ZIPNAME
+          Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+      - name: Logu yukle (hata durumunda)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            /home/runner/rom/build.log
+            /home/runner/rom/out/error.log
+          if-no-files-found: ignore
+          retention-days: 7
