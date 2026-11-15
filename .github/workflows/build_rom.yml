@@ -65,7 +65,7 @@ jobs:
 
       - name: Create Device Tree Directories
         run: |
-          cd /home/runner/ro
+          cd /home/runner/rom
           mkdir -p device/oppo/CPH2269
           mkdir -p vendor/oplus/CPH2269
 
