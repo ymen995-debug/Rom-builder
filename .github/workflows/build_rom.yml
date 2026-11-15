@@ -95,7 +95,9 @@ jobs:
           git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ymen995-debug/cph2269-crdroid-releases.git rom-repo || mkdir rom-repo && cd rom-repo && git init && cd ..
       
           # Zip dosyasını repo klasörüne kopyala
-          cp /home/runner/rom/out/target/product/CPH2269/*.zip rom-repo/
+          mkdir -p /home/runner/rom/out/target/product/CPH2269/Crdroid
+          mkdir -p /home/runner/rom/out/target/product/CPH2269/Crdroid.zip
+          cp /home/runner/rom/out/target/product/CPH2269/Crdroid.zip rom-repo/
       
           cd rom-repo
           git checkout -b main || git checkout main
