@@ -63,6 +63,12 @@ jobs:
           repo init -u https://github.com/crdroidandroid/android.git -b 11.0 --no-repo-verify --depth=1
           repo sync -c -j1 --no-clone-bundle --no-tags --optimized-fetch --prune --force-syn
 
+      - name: Create Device Tree Directories
+        run: |
+          cd /home/runner/ro
+          mkdir -p device/oppo/CPH2269
+          mkdir -p vendor/oplus/CPH2269
+
       - name: Clone Oppo A16 ROM Device & Vendor Trees
         run: |
           cd /home/runner/rom
