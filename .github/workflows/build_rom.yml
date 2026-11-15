@@ -100,7 +100,7 @@ jobs:
           ls -la
           cd
           cd /home/runner/rom
-          ls -la 
+          ls -la
           cd rom-repo
           git add .
           git diff --cached --quiet || git commit -m "Upload crDroid ROM for CPH2269"
