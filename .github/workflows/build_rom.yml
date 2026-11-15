@@ -79,24 +79,9 @@ jobs:
       - name: Adapt Device Tree for crDroid
         run: |
           cd /home/runner/rom/device/oppo/CPH2269
-          ls -la
-          cd
-          cd /home/runner/rom/
-          ls -la
-          cd
-          cd /home/runner/rom/device/oppo/CPH2269/device_oppo_CPH2269
-          ls -la
           if [ -f "twrp_CPH2269.mk" ]; then
             mv twrp_CPH2269.mk crdroid_CPH2269.mk
           fi
           sed -i 's/twrp_CPH2269/crdroid_CPH2269/g' AndroidProducts.mk || true
-          sed -i 's/twrp/crdroid/g' crdroid_CPH2269.mk || true
-          sed -i 's|vendor/twrp/config/common.mk|vendor/crdroid/config/common_full_phone.mk|g' crdroid_CPH2269.mk || true
-          
-          # Vendor tarafındaki makefile dosyalarındaki olası uyumsuzlukları düzeltelim
-          cd /home/runner/rom/vendor_oplus_CPH2269
-          for f in *.mk; do
-            if [ -f "$f" ]; then
-              sed -i 's/lineage/crdroid/g' "$f" || true
-            fi
-          done
+          sed -i 's/twrp_CPH2269/crdroid/g' crdroid_CPH2269.mk || true
+          sed -i 's|vendor/twrp/config/common.mk|vendor/crdroid/config/common.mk|g' crdroid_CPH2269.mk || true
