@@ -7,7 +7,7 @@ Kullanim:
       --out plan.json
 
 Cikti: plan.json  -> [{"role","url","branch","path"}, ...]
-Cikis kodlari: 0 = basarili, 2 = device tree bulunamadi, 3 = sadece recovery agaci bulundu
+Cikis kodlari: 0 = basarili, 2 = device tree bulunamadi, 3 = sadece recovery agaci, 4 = surum uyusmuyor
 """
 import argparse, base64, json, math, os, re, sys, time, urllib.error, urllib.parse, urllib.request
 from datetime import datetime, timezone
@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 API = "https://api.github.com"
 TOKEN = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
 LOG = []
+SEEN = []  # incelenen adaylar (repo, dal, android)
 
 # Android surumu -> tercih edilen dal desenleri (en iyi eslesen once)
 BRANCH_PREFS = {
@@ -139,6 +140,21 @@ def pick_branch(branches, default, android):
     return best or default or (branches[0] if branches else None), best_score >= 0
 
 
+LINEAGE_TO_ANDROID = {"16": "9", "17": "10", "18": "11", "19": "12", "20": "13", "21": "14", "22": "15"}
+ANDROID_NAMES = {"10": "crDroid 10.0 / lineage-17.1", "11": "crDroid 11.0 / lineage-18.1",
+                 "12": "crDroid 12.1 / lineage-19.1", "13": "crDroid 13.0 / lineage-20.0",
+                 "14": "crDroid 14.0 / lineage-21.0", "15": "lineage-22.x"}
+
+
+def branch_android(branch):
+    """Dal adindan Android ana surumunu tahmin eder (bilinmezse None)."""
+    m = re.match(r"lineage-(\d+)", branch or "", re.I)
+    if m:
+        return LINEAGE_TO_ANDROID.get(m.group(1))
+    m = re.match(r"(?:android-?)?(\d+)(?:\.\d+)?$", branch or "", re.I)
+    return m.group(1) if m else None
+
+
 def branch_mismatch(branch, android):
     return any(re.search(p, branch or "", re.I) for p in OTHER_VERSION_HINTS.get(android, []))
 
@@ -212,7 +228,7 @@ def best_candidate(scored, a, role, codename, limit=6):
         branch, matched = pick_branch(branches, it.get("default_branch"), a.android)
         if not branch:
             continue
-        total = sc + (60 if matched else 0)
+        total = sc + ((200 if role == "device" else 60) if matched else 0)
         if branch_mismatch(branch, a.android) and not matched:
             total -= 40
         info = None
@@ -224,7 +240,9 @@ def best_candidate(scored, a, role, codename, limit=6):
         log(f"  aday: {full}@{branch} puan={total:.0f}" +
             (f" rom_ready={info['rom_ready']} recovery_only={info['recovery_only']}" if info else ""))
         if best is None or total > best["score"]:
-            best = {"score": total, "full": full, "branch": branch, "item": it, "info": info}
+            best = {"score": total, "full": full, "branch": branch, "item": it, "info": info,
+                    "matched": matched}
+        SEEN.append((full, branch, branch_android(branch)))
     return best
 
 
@@ -235,24 +253,43 @@ def path_from_name(name, role, fallback_brand, codename):
     return f"{role}/{norm(fallback_brand)}/{codename}"
 
 
-def resolve_dependency(dep, owners, a):
+def resolve_dependency(dep, owners, a, prefer_branch=None):
     """lineage.dependencies girdisini (repo, branch, path) haline getirir."""
     repo = dep.get("repository", "")
     target = dep.get("target_path", "")
     if not repo or not safe_path(target):
         log(f"  atlandi (gecersiz yol): {dep}")
         return None
-    cands = [repo] if "/" in repo else [f"{o}/{repo}" for o in owners]
+    names = [repo] if "/" in repo else [repo] + ([f"android_{repo}"] if not repo.startswith("android_") else [])
+    cands = [repo] if "/" in repo else [f"{o}/{n}" for n in names for o in owners]
+    # son care: adla GitHub genelinde ara
+    found = None
     for full in cands:
-        meta = api(f"/repos/{full}")
-        if meta:
-            branches = list_branches(full)
-            branch = dep.get("branch")
-            if branch not in branches:
-                branch, _ = pick_branch(branches, meta.get("default_branch"), a.android)
-            return {"full": full, "branch": branch, "path": target}
-    log(f"  bagimlilik bulunamadi: {repo}")
-    return None
+        found = api(f"/repos/{full}")
+        if found:
+            break
+    if not found:
+        base = repo.split("/")[-1]
+        hits = [i for i in search_repos([f"{base} in:name"])
+                if norm(i["name"]).endswith(norm(base)) or norm(base) in norm(i["name"])]
+        hits.sort(key=lambda i: (-(prefer_branch in list_branches(i["full_name"]) if prefer_branch else 0),
+                                 -i.get("stargazers_count", 0)))
+        found = hits[0] if hits else None
+        if found:
+            log(f"  bagimlilik aramayla bulundu: {found['full_name']}")
+    if not found:
+        log(f"  bagimlilik bulunamadi: {repo}")
+        return None
+    full = found["full_name"]
+    branches = list_branches(full)
+    branch = None
+    for cand in (dep.get("branch"), prefer_branch):
+        if cand and cand in branches:
+            branch = cand
+            break
+    if not branch:
+        branch, _ = pick_branch(branches, found.get("default_branch"), a.android)
+    return {"full": full, "branch": branch, "path": target}
 
 
 def parse_override(s):
@@ -312,6 +349,19 @@ def main():
         write_summary(a, None)
         return 2
     info = best["info"]
+    ver = branch_android(best["branch"])
+    if not a.device_override and not best.get("matched") and ver != a.android:
+        log(f"HATA: Bu cihaz icin Android {a.android} device tree'si bulunamadi.")
+        log("Bulunan agaclar ve surumleri:")
+        for full, br, v in dict.fromkeys(SEEN):
+            log(f"  - {full}@{br}  (Android {v or '?'})")
+        vs = sorted({v for _, _, v in SEEN if v})
+        for v in vs:
+            log(f"=> Android {v} icin su degeri 'android_version' alanina yaz: {ANDROID_NAMES.get(v, v)}")
+        log("Baska surum denemek istemiyorsan 'device_tree_override' ile Android " + a.android + " agacini elle ver.")
+        write_summary(a, best)
+        json.dump([], open(a.out, "w"))
+        return 4
     if info["recovery_only"] and not a.allow_recovery:
         log(f"HATA: Bulunan agac ({best['full']}) sadece recovery (TWRP/Fox) agaci. ROM derlenemez.")
         log("Gercek bir ROM agaci bulursaniz 'device_tree_override' ile verin, ya da riski kabul edip 'try_recovery_tree' secin.")
@@ -339,7 +389,7 @@ def main():
                 log(f"  {fn} okunamadi ({full})")
                 continue
             for dep in deps:
-                r = resolve_dependency(dep, owners, a)
+                r = resolve_dependency(dep, owners, a, best["branch"])
                 if r and r["path"] not in seen_paths:
                     role = classify(r["full"].split("/")[1])
                     add(role if role != "other" else "dependency", r["full"], r["branch"], r["path"])
@@ -351,6 +401,8 @@ def main():
         v = best_candidate(find_role("vendor", keys, a), a, "vendor", a.codename, limit=4)
         if v:
             add("vendor", v["full"], v["branch"], path_from_name(v["item"]["name"], "vendor", a.brand, a.codename))
+            if not v.get("matched"):
+                log(f"UYARI: vendor dali ({v['branch']}) Android {a.android} ile eslesmiyor, blob'lar uyumsuz olabilir.")
         else:
             log("UYARI: vendor tree bulunamadi (blob'lar eksik olabilir).")
 
