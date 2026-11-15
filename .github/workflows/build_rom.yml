@@ -1,4 +1,4 @@
-name: Build crDroid for Oppo A16
+name: OS ROM Compiler
 
 on:
   workflow_dispatch:
@@ -6,25 +6,25 @@ on:
       rom_type:
         description: 'Derlenecek ROM Türü'
         required: true
-        default: 'crdroid'
+        default: ''
       android_version:
         description: 'Android Sürümü (örn. 13.0)'
         required: true
-        default: '13.0'
+        default: '11.0'
       device_brand:
-        description: 'Cihaz Markası (örn. oppo)'
+        description: 'Cihaz Markası (örn. Huawei)'
         required: true
-        default: 'oppo'
+        default: ''
       device_codename:
-        description: 'Cihaz Kod Adı (örn. CPH2269)'
+        description: 'Cihaz Kod Adı (örn. agold)'
         required: true
-        default: 'CPH2269'
+        default: ''
       github_username:
         description: 'GitHub Kullanıcı Adın'
         required: true
-        default: 'ymen995-debug'
+        default: ''
       github_token:
-        description: 'GitHub Personal Access Token (PAT)'
+        description: 'GitHub Personal Access Classic Token (PAT)'
         required: true
         default: ''
 
@@ -85,3 +85,10 @@ jobs:
           sed -i 's/twrp_CPH2269/crdroid_CPH2269/g' AndroidProducts.mk || true
           sed -i 's/twrp_CPH2269/crdroid/g' crdroid_CPH2269.mk || true
           sed -i 's|vendor/twrp/config/common.mk|vendor/crdroid/config/common.mk|g' crdroid_CPH2269.mk || true
+
+      - name: Upload Zip to GitHub Releases
+        uses: softprops/action-gh-release@v1
+        with:
+          files: /home/runner/rom/out/target/product/CPH2269/*.zip
+          tag_name: cph2269-crdroid-build
+          name: "crDroid CPH2269 Build"
