@@ -8,17 +8,13 @@ on:
   workflow_dispatch:
     inputs:
       rom_type:
-        description: 'ROM turu'
+        description: 'ROM turu - istedigini yaz (orn. crDroid, LineageOS) veya manifest URL (https://github.com/.../android.git)'
         required: true
-        type: choice
-        default: 'crDroid'
-        options: [crDroid, LineageOS]
+        default: ''
       android_version:
-        description: 'Android surumu'
+        description: 'Android surumu / dal adi - ROM nasil yaziyorsa yaz (orn. 11.0 | 14.0 | lineage-18.1)'
         required: true
-        type: choice
-        default: '11'
-        options: ['11', '12', '13', '14']
+        default: ''
       github_username:
         description: 'GitHub kullanici adin (once senin repolarina bakilir)'
         required: true
@@ -48,10 +44,9 @@ on:
         required: false
         default: ''
       try_recovery_tree:
-        description: 'Sadece TWRP/recovery agaci bulunursa yine de dene (cogunlukla basarisiz olur)'
+        description: 'Sadece TWRP/recovery agaci bulunursa yine de dene? evet / hayir (cogunlukla basarisiz olur)'
         required: false
-        type: boolean
-        default: false
+        default: 'hayir'
 
 permissions:
   contents: read
@@ -70,6 +65,7 @@ jobs:
       plan: ${{ steps.find.outputs.plan }}
       rom_url: ${{ steps.rom.outputs.url }}
       rom_branch: ${{ steps.rom.outputs.branch }}
+      android_major: ${{ steps.rom.outputs.major }}
     steps:
       - uses: actions/checkout@v4
 
@@ -80,29 +76,55 @@ jobs:
           MODEL: ${{ inputs.device_model }}
           COUNTRY: ${{ inputs.country_code }}
           GHUSER: ${{ inputs.github_username }}
+          ROM: ${{ inputs.rom_type }}
+          AV: ${{ inputs.android_version }}
         run: |
           chk() { [[ "$2" =~ ^[A-Za-z0-9._\ -]{1,64}$ ]] || { echo "::error::'$1' gecersiz karakter iceriyor"; exit 1; }; }
           chk "marka" "$BRAND"; chk "kod adi" "$CODENAME"; chk "model" "$MODEL"
           chk "ulke kodu" "$COUNTRY"; chk "kullanici adi" "$GHUSER"
+          [[ "$ROM" =~ ^[A-Za-z0-9._:/@\ -]{1,150}$ ]] || { echo "::error::ROM turu gecersiz"; exit 1; }
+          [[ "$AV"  =~ ^[A-Za-z0-9._/-]{1,60}$ ]] || { echo "::error::Android surumu gecersiz"; exit 1; }
 
-      - name: ROM kaynagini ve dalini sec
+      - name: ROM kaynagini ve dalini bul
         id: rom
         env:
           ROM: ${{ inputs.rom_type }}
           AV: ${{ inputs.android_version }}
         run: |
-          case "$ROM" in
-            crDroid)
-              URL=https://github.com/crdroidandroid/android.git
-              case "$AV" in 11) BR=11.0;; 12) BR=12.1;; 13) BR=13.0;; 14) BR=14.0;; esac ;;
-            LineageOS)
-              URL=https://github.com/LineageOS/android.git
-              case "$AV" in 11) BR=lineage-18.1;; 12) BR=lineage-19.1;; 13) BR=lineage-20.0;; 14) BR=lineage-21.0;; esac ;;
+          ROMN=$(echo "$ROM" | tr 'A-Z' 'a-z' | tr -d ' _-')
+          # 1) ROM -> manifest URL (adi yazilmis ya da dogrudan URL verilmis)
+          case "$ROMN" in
+            crdroid*)            URL=https://github.com/crdroidandroid/android.git; KIND=crdroid ;;
+            lineage*)            URL=https://github.com/LineageOS/android.git;       KIND=lineage ;;
+            https://github.com/*) URL="$ROM"; KIND=other ;;
+            *) echo "::error::'$ROM' taninmiyor. crDroid, LineageOS yaz ya da manifest URL'sini (https://github.com/.../android.git) gir."; exit 1 ;;
           esac
-          if ! git ls-remote --exit-code --heads "$URL" "$BR" >/dev/null; then
-            echo "::error::$ROM icin Android $AV dali ($BR) yok. Baska bir surum secin."; exit 1
+          # 2) Dal adayi: tam yazdigi gibi, sonra turetilmis varyantlar
+          NUM=$(grep -oE '[0-9]+(\.[0-9]+)?' <<<"$AV" | head -n1)
+          CANDS=("$AV")
+          if [ "$KIND" = lineage ] && [[ "$AV" != lineage-* ]]; then
+            case "$NUM" in 10) L=17.1;; 11) L=18.1;; 12) L=19.1;; 13) L=20.0;; 14) L=21.0;; 15) L=22.2;; *) L="$NUM";; esac
+            CANDS=("lineage-$L" "lineage-$NUM" "lineage-$NUM.0" "$AV")
+          elif [[ "$AV" =~ ^[0-9]+$ ]]; then
+            CANDS=("$AV.0" "$AV" "$AV.1")
           fi
-          echo "url=$URL" >> "$GITHUB_OUTPUT"; echo "branch=$BR" >> "$GITHUB_OUTPUT"
+          BR=""
+          for c in "${CANDS[@]}"; do
+            if git ls-remote --exit-code --heads "$URL" "$c" >/dev/null 2>&1; then BR="$c"; break; fi
+          done
+          if [ -z "$BR" ]; then
+            echo "::error::$URL icinde '$AV' dali bulunamadi. Denenenler: ${CANDS[*]}"
+            echo "Mevcut dallar (ilk 40):"; git ls-remote --heads "$URL" | sed 's#.*refs/heads/##' | head -40
+            exit 1
+          fi
+          # 3) Android ana surumu (device tree dali aramasi icin)
+          MAJOR=""
+          if [[ "$BR" =~ ^lineage-([0-9]+) ]]; then
+            case "${BASH_REMATCH[1]}" in 17) MAJOR=10;; 18) MAJOR=11;; 19) MAJOR=12;; 20) MAJOR=13;; 21) MAJOR=14;; 22) MAJOR=15;; esac
+          fi
+          [ -z "$MAJOR" ] && MAJOR=$(grep -oE '[0-9]+' <<<"$BR" | head -n1)
+          echo "ROM: $URL  dal: $BR  Android: $MAJOR"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"; echo "branch=$BR" >> "$GITHUB_OUTPUT"; echo "major=$MAJOR" >> "$GITHUB_OUTPUT"
 
       - name: Device / vendor / kernel agaclarini ara
         id: find
@@ -113,15 +135,15 @@ jobs:
           MODEL: ${{ inputs.device_model }}
           COUNTRY: ${{ inputs.country_code }}
           GHUSER: ${{ inputs.github_username }}
-          AV: ${{ inputs.android_version }}
+          AV: ${{ steps.rom.outputs.major }}
           ROM: ${{ inputs.rom_type }}
           OVERRIDE: ${{ inputs.device_tree_override }}
           RECOVERY_OK: ${{ inputs.try_recovery_tree }}
         run: |
           ARGS=(--brand "$BRAND" --codename "$CODENAME" --model "$MODEL" --country "$COUNTRY"
                 --user "$GHUSER" --android "$AV" --rom "$ROM" --out plan.json)
-          [ -n "$OVERRIDE" ] && ARGS+=(--device-override "$OVERRIDE")
-          [ "$RECOVERY_OK" = "true" ] && ARGS+=(--allow-recovery)
+          if [ -n "$OVERRIDE" ]; then ARGS+=(--device-override "$OVERRIDE"); fi
+          case "$(echo "$RECOVERY_OK" | tr 'A-Z' 'a-z')" in evet|e|yes|y|true|1) ARGS+=(--allow-recovery) ;; esac
           python3 scripts/find_device_trees.py "${ARGS[@]}"
           jq -e 'length > 0' plan.json >/dev/null
           echo "plan=$(jq -c . plan.json)" >> "$GITHUB_OUTPUT"

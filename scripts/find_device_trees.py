@@ -18,10 +18,12 @@ LOG = []
 
 # Android surumu -> tercih edilen dal desenleri (en iyi eslesen once)
 BRANCH_PREFS = {
+    "10": [r"lineage-17\.1", r"^10(\.0)?$", r"android-?10", r"17\.1"],
     "11": [r"lineage-18\.1", r"crdroid.*11", r"^11(\.0)?$", r"android-?11", r"18\.1"],
     "12": [r"lineage-19\.1", r"lineage-19\b", r"^12(\.[01])?$", r"android-?12", r"19\.1"],
     "13": [r"lineage-20(\.0)?", r"^13(\.0)?$", r"android-?13", r"\b20\.0"],
     "14": [r"lineage-21(\.0)?", r"^14(\.0)?$", r"android-?14", r"\b21\.0"],
+    "15": [r"lineage-22(\.\d)?", r"^15(\.0)?$", r"android-?15", r"\b22\.\d"],
 }
 OTHER_VERSION_HINTS = {  # yanlis surume ait dallari cezalandirmak icin
     "11": [r"lineage-(1[79]|2\d)", r"android-?(9|10|12|13|14)\b", r"^(12|13|14)"],
@@ -272,12 +274,14 @@ def main():
     p.add_argument("--model", default="")
     p.add_argument("--country", default="")
     p.add_argument("--user", default="")
-    p.add_argument("--android", required=True, choices=sorted(BRANCH_PREFS))
+    p.add_argument("--android", required=True, help="Android ana surumu, orn. 11")
     p.add_argument("--rom", default="crdroid")
     p.add_argument("--device-override", default="")
     p.add_argument("--allow-recovery", action="store_true")
     p.add_argument("--out", default="plan.json")
     a = p.parse_args()
+    if a.android not in BRANCH_PREFS:  # bilinmeyen surum icin genel desenler
+        BRANCH_PREFS[a.android] = [rf"^{re.escape(a.android)}(\.\d)?$", rf"android-?{re.escape(a.android)}"]
 
     keys = list(dict.fromkeys([a.codename, norm(a.model) if len(norm(a.model)) >= 4 else ""]))
     plan, seen_paths = [], set()
