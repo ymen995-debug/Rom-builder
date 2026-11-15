@@ -87,21 +87,21 @@ jobs:
           sed -i 's|vendor/twrp/config/common.mk|vendor/crdroid/config/common.mk|g' crdroid_CPH2269.mk || true
 
       - name: Upload ROM to GitHub Repository
-  run: |
-    git config --global user.name "ymen995-debug"
-    git config --global user.email "ozmuseymen995@gmail.com"
+        run: |
+          git config --global user.name "ymen995-debug"
+          git config --global user.email "ozmuseymen995@gmail.com"
     
-    # rom-repo klasörünün içine ROM zip dosyasının kopyalandığından emin oluyoruz
-    cp out/target/product/cph2269/*.zip rom-repo/ || true
+          # rom-repo klasörünün içine ROM zip dosyasının kopyalandığından emin oluyoruz
+          cp out/target/product/cph2269/*.zip rom-repo/ || true
     
-    cd /home/runner/rom
-    ls -la
-    cd /home/runner/rom/rom-repo
-    ls -la
-    cd
-    cd /home/runner/rom
-    ls -la 
-    cd rom-repo
-    git add .
-    git diff --cached --quiet || git commit -m "Upload crDroid ROM for CPH2269"
-    git push origin main --force
+          cd /home/runner/rom
+          ls -la
+          cd /home/runner/rom/rom-repo
+          ls -la
+          cd
+          cd /home/runner/rom
+          ls -la 
+          cd rom-repo
+          git add .
+          git diff --cached --quiet || git commit -m "Upload crDroid ROM for CPH2269"
+          git push origin main --force
