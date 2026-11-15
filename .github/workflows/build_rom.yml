@@ -86,9 +86,19 @@ jobs:
           sed -i 's/twrp_CPH2269/crdroid/g' crdroid_CPH2269.mk || true
           sed -i 's|vendor/twrp/config/common.mk|vendor/crdroid/config/common.mk|g' crdroid_CPH2269.mk || true
 
-      - name: Upload Zip to GitHub Releases
-        uses: softprops/action-gh-release@v1
-        with:
-          files: /home/runner/rom/out/target/product/CPH2269/*.zip
-          tag_name: cph2269-crdroid-build
-          name: "crDroid CPH2269 Build"
+      - name: Upload ROM to GitHub Repository
+    run: |
+      git config --global user.name "ymen995-debug"
+      git config --global user.email "ozmuseymen995@gmail.com"
+      
+      # Yeni veya hedef depoyu clone'la ya da remote bağla
+      git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ymen995-debug/cph2269-crdroid-releases.git rom-repo || mkdir rom-repo && cd rom-repo && git init && cd ..
+      
+      # Zip dosyasını repo klasörüne kopyala
+      cp /home/runner/rom/out/target/product/CPH2269/*.zip rom-repo/
+      
+      cd rom-repo
+      git checkout -b main || git checkout main
+      git add *.zip
+      git commit -m "CRDroid CPH2269 Build - Otomatik Yükleme"
+      git push -u https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ymen995-debug/cph2269-crdroid-releases.git main --force
