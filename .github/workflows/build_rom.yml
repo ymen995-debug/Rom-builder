@@ -1,111 +1,26 @@
-name: Karinca Hatti - ROM Builder
+name: ROM Builder
 
 on:
   workflow_dispatch:
     inputs:
       rom_type:
-        description: 'ROM turu (orn. crDroid, LineageOS)'
+        description: 'ROM turu (orn. crDroid)'
         required: true
         default: 'crDroid'
       android_version:
-        description: 'Android surumu / dal adi (orn. 13.0 | 14.0)'
+        description: 'Android surumu (orn. 13.0)'
         required: true
         default: '13.0'
-      github_username:
-        description: 'GitHub kullanici adin'
-        required: true
-        default: 'ymen995-debug'
-      device_brand:
-        description: 'Cihaz markasi (orn. Oppo)'
-        required: true
-        default: 'Oppo'
       device_codename:
         description: 'Cihaz kod adi (orn. CPH2269)'
         required: true
         default: 'CPH2269'
-      device_model:
-        description: 'Cihaz modeli (orn. A16)'
-        required: true
-        default: 'A16'
 
 jobs:
-  fetcher:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Kaynak Kodlari Cek
-        run: |
-          echo "[*] Karinca Hatti: Toplayici isci basladi."
-          mkdir -p ~/bin
-          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
-          chmod a+x ~/bin/repo
-          export PATH=~/bin:$PATH
-          mkdir -p /tmp/rom
-          cd /tmp/rom
-          ROM_URL="https://github.com/${{ github.event.inputs.rom_type }}/android.git"
-          ROM_BRANCH="${{ github.event.inputs.android_version }}"
-          repo init -u $ROM_URL -b $ROM_BRANCH --depth=1
-          repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
-          tar -czf /tmp/rom_source.tar.gz /tmp/rom
-      - name: Kodu Yukle
-        uses: actions/upload-artifact@v3
-        with:
-          name: source-code
-          path: /tmp/rom_source.tar.gz
-
-  builder:
-    needs: fetcher
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [bootimage, systemimage, vendorimage]
-    steps:
-      - name: Kodu Indir
-        uses: actions/download-artifact@v3
-        with:
-          name: source-code
-          path: /tmp/
-      - name: Kodu Ac
-        run: |
-          cd /tmp
-          tar -xzf rom_source.tar.gz
-      - name: Bagimliliklari Kur
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev openjdk-11-jdk python3 python-is-python3
-      - name: Derleme Ortamini Hazirla
-        run: |
-          cd /tmp/rom
-          source build/envsetup.sh
-          lunch ${{ github.event.inputs.rom_type }}_${{ github.event.inputs.device_codename }}-userdebug
-      - name: HEDEF DERLE: ${{ matrix.target }}
-        run: |
-          cd /tmp/rom
-          make -j$(nproc --all) ${{ matrix.target }}
-      - name: Parcayi Yukle
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ matrix.target }}
-          path: /tmp/rom/out/target/product/${{ github.event.inputs.device_codename }}/${{ matrix.target }}.img
-
-  assembler:
-    needs: builder
-    runs-on: ubuntu-latest
-    steps:
-      - name: Parcalari Indir
-        uses: actions/download-artifact@v3
-        with:
-          path: /tmp/artifacts
-      - name: Birlestir ve Paketle
-        run: |
-          mkdir -p /tmp/final_rom
-          cp /tmp/artifacts/bootimage/bootimage.img /tmp/final_rom/boot.img
-          cp /tmp/artifacts/systemimage/systemimage.img /tmp/final_rom/system.img
-          cp /tmp/artifacts/vendorimage/vendorimage.img /tmp/final_rom/vendor.img
-          cd /tmp/final_rom
-          zip -r9 ../rom.zip .
-      - name: Nihai ROM'u Yukle
-        uses: actions/upload-artifact@v3
-        with:
-          name: Karinca-Hatti-Nihai-ROM
-          path: /tmp/rom.zip
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Test Calisma
+        run: echo "Sistem calisiyor! Cihaz: ${{ github.event.inputs.device_codename }}"
