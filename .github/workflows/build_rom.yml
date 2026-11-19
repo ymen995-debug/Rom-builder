@@ -4,15 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       rom_type:
-        description: 'ROM turu - istedigini yaz (orn. crDroid, LineageOS) veya manifest URL'
+        description: 'ROM turu (orn. crDroid, LineageOS)'
         required: true
         default: 'crDroid'
       android_version:
-        description: 'Android surumu / dal adi (orn. 13.0 | 14.0 | lineage-20)'
+        description: 'Android surumu / dal adi (orn. 13.0 | 14.0)'
         required: true
         default: '13.0'
       github_username:
-        description: 'GitHub kullanici adin (once senin repolarina bakilir)'
+        description: 'GitHub kullanici adin'
         required: true
         default: 'ymen995-debug'
       device_brand:
@@ -27,68 +27,37 @@ on:
         description: 'Cihaz modeli (orn. A16)'
         required: true
         default: 'A16'
-      serial_number:
-        description: 'Seri no (OPSIYONEL, derlemede kullanilmaz, herkese acik gorunur: bos birak!)'
-        required: false
-        default: ''
-      country_code:
-        description: 'Ulke kodu (orn. TR)'
-        required: true
-        default: 'TR'
-      device_tree_override:
-        description: 'Opsiyonel: elle device tree (kullanici/repo@dal). Bos = otomatik ara'
-        required: false
-        default: ''
-      try_recovery_tree:
-        description: 'Sadece TWRP/recovery agaci bulunursa yine de dene? evet / hayir'
-        required: false
-        default: 'hayir'
 
 jobs:
-  # ==========================================
-  # ISCI 1: TOPLAYICI (FETCHER)
-  # ==========================================
   fetcher:
     runs-on: ubuntu-latest
     steps:
-      - name: Kaynak Kodlari Cek (Repo Sync)
+      - name: Kaynak Kodlari Cek
         run: |
           echo "[*] Karinca Hatti: Toplayici isci basladi."
           mkdir -p ~/bin
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
           chmod a+x ~/bin/repo
           export PATH=~/bin:$PATH
-
           mkdir -p /tmp/rom
           cd /tmp/rom
-          
-          # Kullanicinin girdigi ROM ve versiyona gore dal secimi
           ROM_URL="https://github.com/${{ github.event.inputs.rom_type }}/android.git"
           ROM_BRANCH="${{ github.event.inputs.android_version }}"
-          
           repo init -u $ROM_URL -b $ROM_BRANCH --depth=1
           repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
-          
-          echo "[+] Kaynak kodlar hazir."
           tar -czf /tmp/rom_source.tar.gz /tmp/rom
-
-      - name: Kodu Artifact Olarak Yukle
+      - name: Kodu Yukle
         uses: actions/upload-artifact@v3
         with:
           name: source-code
           path: /tmp/rom_source.tar.gz
-          retention-days: 1
 
-  # ==========================================
-  # ISCI 2, 3, 4: PAKETLEYICI (PACKER) - MATRIX
-  # ==========================================
   builder:
     needs: fetcher
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # Karinca Hatti: Ayni anda farkli hedefler derleniyor
         target: [bootimage, systemimage, vendorimage]
     steps:
       - name: Kodu Indir
@@ -96,63 +65,47 @@ jobs:
         with:
           name: source-code
           path: /tmp/
-          
       - name: Kodu Ac
         run: |
           cd /tmp
           tar -xzf rom_source.tar.gz
-
       - name: Bagimliliklari Kur
         run: |
           sudo apt-get update
           sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev openjdk-11-jdk python3 python-is-python3
-
       - name: Derleme Ortamini Hazirla
         run: |
           cd /tmp/rom
           source build/envsetup.sh
           lunch ${{ github.event.inputs.rom_type }}_${{ github.event.inputs.device_codename }}-userdebug
-
       - name: HEDEF DERLE: ${{ matrix.target }}
         run: |
           cd /tmp/rom
-          echo "[*] Karinca Isci: ${{ matrix.target }} derleniyor..."
           make -j$(nproc --all) ${{ matrix.target }}
-          
       - name: Parcayi Yukle
         uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.target }}
           path: /tmp/rom/out/target/product/${{ github.event.inputs.device_codename }}/${{ matrix.target }}.img
-          retention-days: 1
 
-  # ==========================================
-  # ISCI 5: BIRLESTIRICI (ASSEMBLER)
-  # ==========================================
   assembler:
     needs: builder
     runs-on: ubuntu-latest
     steps:
-      - name: Tum Parcalari Indir
+      - name: Parcalari Indir
         uses: actions/download-artifact@v3
         with:
           path: /tmp/artifacts
-
-      - name: Parcalari Tek Bir Klasorde Topla
+      - name: Birlestir ve Paketle
         run: |
           mkdir -p /tmp/final_rom
           cp /tmp/artifacts/bootimage/bootimage.img /tmp/final_rom/boot.img
           cp /tmp/artifacts/systemimage/systemimage.img /tmp/final_rom/system.img
           cp /tmp/artifacts/vendorimage/vendorimage.img /tmp/final_rom/vendor.img
-          
-      - name: Nihai ROM'u Paketle (Zip)
-        run: |
           cd /tmp/final_rom
-          zip -r9 ../${{ github.event.inputs.rom_type }}_${{ github.event.inputs.device_codename }}_karinca_hatti.zip .
-          
+          zip -r9 ../rom.zip .
       - name: Nihai ROM'u Yukle
         uses: actions/upload-artifact@v3
         with:
           name: Karinca-Hatti-Nihai-ROM
-          path: /tmp/${{ github.event.inputs.rom_type }}_${{ github.event.inputs.device_codename }}_karinca_hatti.zip
-          retention-days: 7
+          path: /tmp/rom.zip
