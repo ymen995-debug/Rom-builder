@@ -1,36 +1,32 @@
-name: ROM Builder (Otomatik Cihaz Bulucu)
-
-# Kullanim: Actions -> "ROM Builder" -> Run workflow -> formu doldur.
-# Workflow cihazin device/vendor/kernel agaclarini GitHub'da kendisi arar, kaynaklari indirir,
-# ROM'u GitHub sunucularinda derler ve sonucu bu reponun "Releases" bolumune yukler.
+name: Karinca Hatti - ROM Builder
 
 on:
   workflow_dispatch:
     inputs:
       rom_type:
-        description: 'ROM turu - istedigini yaz (orn. crDroid, LineageOS) veya manifest URL (https://github.com/.../android.git)'
+        description: 'ROM turu - istedigini yaz (orn. crDroid, LineageOS) veya manifest URL'
         required: true
-        default: ''
+        default: 'crDroid'
       android_version:
-        description: 'Android surumu / dal adi - ROM nasil yaziyorsa yaz (orn. 11.0 | 14.0 | lineage-18.1)'
+        description: 'Android surumu / dal adi (orn. 13.0 | 14.0 | lineage-20)'
         required: true
-        default: ''
+        default: '13.0'
       github_username:
         description: 'GitHub kullanici adin (once senin repolarina bakilir)'
         required: true
-        default: ''
+        default: 'ymen995-debug'
       device_brand:
         description: 'Cihaz markasi (orn. Oppo)'
         required: true
-        default: ''
+        default: 'Oppo'
       device_codename:
         description: 'Cihaz kod adi (orn. CPH2269)'
         required: true
-        default: ''
+        default: 'CPH2269'
       device_model:
         description: 'Cihaz modeli (orn. A16)'
         required: true
-        default: ''
+        default: 'A16'
       serial_number:
         description: 'Seri no (OPSIYONEL, derlemede kullanilmaz, herkese acik gorunur: bos birak!)'
         required: false
@@ -44,264 +40,119 @@ on:
         required: false
         default: ''
       try_recovery_tree:
-        description: 'Sadece TWRP/recovery agaci bulunursa yine de dene? evet / hayir (cogunlukla basarisiz olur)'
+        description: 'Sadece TWRP/recovery agaci bulunursa yine de dene? evet / hayir'
         required: false
         default: 'hayir'
 
-permissions:
-  contents: read
-
-env:
-  ROM_DIR: /home/runner/rom
-
 jobs:
-  # ---------------------------------------------------------------------------------------
-  # 1) Ucuz ve hizli: cihaza ozel agaclari bul. Bulamazsa pahali derleme hic baslamaz.
-  # ---------------------------------------------------------------------------------------
-  discover:
+  # ==========================================
+  # ISCI 1: TOPLAYICI (FETCHER)
+  # ==========================================
+  fetcher:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    outputs:
-      plan: ${{ steps.find.outputs.plan }}
-      rom_url: ${{ steps.rom.outputs.url }}
-      rom_branch: ${{ steps.rom.outputs.branch }}
-      android_major: ${{ steps.rom.outputs.major }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Girdileri dogrula
-        env:
-          BRAND: ${{ inputs.device_brand }}
-          CODENAME: ${{ inputs.device_codename }}
-          MODEL: ${{ inputs.device_model }}
-          COUNTRY: ${{ inputs.country_code }}
-          GHUSER: ${{ inputs.github_username }}
-          ROM: ${{ inputs.rom_type }}
-          AV: ${{ inputs.android_version }}
+      - name: Kaynak Kodlari Cek (Repo Sync)
         run: |
-          chk() { [[ "$2" =~ ^[A-Za-z0-9._\ -]{1,64}$ ]] || { echo "::error::'$1' gecersiz karakter iceriyor"; exit 1; }; }
-          chk "marka" "$BRAND"; chk "kod adi" "$CODENAME"; chk "model" "$MODEL"
-          chk "ulke kodu" "$COUNTRY"; chk "kullanici adi" "$GHUSER"
-          [[ "$ROM" =~ ^[A-Za-z0-9._:/@\ -]{1,150}$ ]] || { echo "::error::ROM turu gecersiz"; exit 1; }
-          [[ "$AV"  =~ ^[A-Za-z0-9._/-]{1,60}$ ]] || { echo "::error::Android surumu gecersiz"; exit 1; }
+          echo "[*] Karinca Hatti: Toplayici isci basladi."
+          mkdir -p ~/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+x ~/bin/repo
+          export PATH=~/bin:$PATH
 
-      - name: ROM kaynagini ve dalini bul
-        id: rom
-        env:
-          ROM: ${{ inputs.rom_type }}
-          AV: ${{ inputs.android_version }}
-        run: |
-          ROMN=$(echo "$ROM" | tr 'A-Z' 'a-z' | tr -d ' _-')
-          # 1) ROM -> manifest URL (adi yazilmis ya da dogrudan URL verilmis)
-          case "$ROMN" in
-            crdroid*)            URL=https://github.com/crdroidandroid/android.git; KIND=crdroid ;;
-            lineage*)            URL=https://github.com/LineageOS/android.git;       KIND=lineage ;;
-            https://github.com/*) URL="$ROM"; KIND=other ;;
-            *) echo "::error::'$ROM' taninmiyor. crDroid, LineageOS yaz ya da manifest URL'sini (https://github.com/.../android.git) gir."; exit 1 ;;
-          esac
-          # 2) Dal adayi: tam yazdigi gibi, sonra turetilmis varyantlar
-          NUM=$(grep -oE '[0-9]+(\.[0-9]+)?' <<<"$AV" | head -n1)
-          CANDS=("$AV")
-          if [ "$KIND" = lineage ] && [[ "$AV" != lineage-* ]]; then
-            case "$NUM" in 10) L=17.1;; 11) L=18.1;; 12) L=19.1;; 13) L=20.0;; 14) L=21.0;; 15) L=22.2;; *) L="$NUM";; esac
-            CANDS=("lineage-$L" "lineage-$NUM" "lineage-$NUM.0" "$AV")
-          elif [[ "$AV" =~ ^[0-9]+$ ]]; then
-            CANDS=("$AV.0" "$AV" "$AV.1")
-          fi
-          BR=""
-          for c in "${CANDS[@]}"; do
-            if git ls-remote --exit-code --heads "$URL" "$c" >/dev/null 2>&1; then BR="$c"; break; fi
-          done
-          if [ -z "$BR" ]; then
-            echo "::error::$URL icinde '$AV' dali bulunamadi. Denenenler: ${CANDS[*]}"
-            echo "Mevcut dallar (ilk 40):"; git ls-remote --heads "$URL" | sed 's#.*refs/heads/##' | head -40
-            exit 1
-          fi
-          # 3) Android ana surumu (device tree dali aramasi icin)
-          MAJOR=""
-          if [[ "$BR" =~ ^lineage-([0-9]+) ]]; then
-            case "${BASH_REMATCH[1]}" in 17) MAJOR=10;; 18) MAJOR=11;; 19) MAJOR=12;; 20) MAJOR=13;; 21) MAJOR=14;; 22) MAJOR=15;; esac
-          fi
-          [ -z "$MAJOR" ] && MAJOR=$(grep -oE '[0-9]+' <<<"$BR" | head -n1)
-          echo "ROM: $URL  dal: $BR  Android: $MAJOR"
-          echo "url=$URL" >> "$GITHUB_OUTPUT"; echo "branch=$BR" >> "$GITHUB_OUTPUT"; echo "major=$MAJOR" >> "$GITHUB_OUTPUT"
+          mkdir -p /tmp/rom
+          cd /tmp/rom
+          
+          # Kullanicinin girdigi ROM ve versiyona gore dal secimi
+          ROM_URL="https://github.com/${{ github.event.inputs.rom_type }}/android.git"
+          ROM_BRANCH="${{ github.event.inputs.android_version }}"
+          
+          repo init -u $ROM_URL -b $ROM_BRANCH --depth=1
+          repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+          
+          echo "[+] Kaynak kodlar hazir."
+          tar -czf /tmp/rom_source.tar.gz /tmp/rom
 
-      - name: Device / vendor / kernel agaclarini ara
-        id: find
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BRAND: ${{ inputs.device_brand }}
-          CODENAME: ${{ inputs.device_codename }}
-          MODEL: ${{ inputs.device_model }}
-          COUNTRY: ${{ inputs.country_code }}
-          GHUSER: ${{ inputs.github_username }}
-          AV: ${{ steps.rom.outputs.major }}
-          ROM: ${{ inputs.rom_type }}
-          OVERRIDE: ${{ inputs.device_tree_override }}
-          RECOVERY_OK: ${{ inputs.try_recovery_tree }}
-        run: |
-          ARGS=(--brand "$BRAND" --codename "$CODENAME" --model "$MODEL" --country "$COUNTRY"
-                --user "$GHUSER" --android "$AV" --rom "$ROM" --out plan.json)
-          if [ -n "$OVERRIDE" ]; then ARGS+=(--device-override "$OVERRIDE"); fi
-          case "$(echo "$RECOVERY_OK" | tr 'A-Z' 'a-z')" in evet|e|yes|y|true|1) ARGS+=(--allow-recovery) ;; esac
-          python3 scripts/find_device_trees.py "${ARGS[@]}"
-          jq -e 'length > 0' plan.json >/dev/null
-          echo "plan=$(jq -c . plan.json)" >> "$GITHUB_OUTPUT"
+      - name: Kodu Artifact Olarak Yukle
+        uses: actions/upload-artifact@v3
+        with:
+          name: source-code
+          path: /tmp/rom_source.tar.gz
+          retention-days: 1
 
-  # ---------------------------------------------------------------------------------------
-  # 2) Derleme. Hizli runner icin repo ayarlarinda RUNNER_LABEL degiskenine buyuk runner
-  #    etiketi yaz (Settings -> Secrets and variables -> Actions -> Variables).
-  # ---------------------------------------------------------------------------------------
-  build:
-    needs: discover
-    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-22.04' }}
-    timeout-minutes: 355
-    permissions:
-      contents: write   # Release yuklemek icin
+  # ==========================================
+  # ISCI 2, 3, 4: PAKETLEYICI (PACKER) - MATRIX
+  # ==========================================
+  builder:
+    needs: fetcher
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Karinca Hatti: Ayni anda farkli hedefler derleniyor
+        target: [bootimage, systemimage, vendorimage]
     steps:
-      - name: Disk alani ac ve swap ekle
+      - name: Kodu Indir
+        uses: actions/download-artifact@v3
+        with:
+          name: source-code
+          path: /tmp/
+          
+      - name: Kodu Ac
         run: |
-          df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache \
-                      /usr/local/share/boost /usr/share/swift /opt/microsoft /opt/az \
-                      /usr/local/.ghcup /usr/local/lib/node_modules || true
-          sudo docker image prune -af || true
-          df -h /
-          if [ "$(free -g | awk '/Mem/{print $2}')" -lt 32 ]; then
-            sudo swapoff -a || true
-            sudo fallocate -l 16G /swapfile && sudo chmod 600 /swapfile
-            sudo mkswap /swapfile && sudo swapon /swapfile
-          fi
-          free -h; nproc
+          cd /tmp
+          tar -xzf rom_source.tar.gz
 
-      - name: Derleme bagimliliklari
+      - name: Bagimliliklari Kur
         run: |
           sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs \
-            gnupg gperf imagemagick jq lib32ncurses5-dev lib32readline-dev lib32z1-dev \
-            libelf-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev \
-            libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc \
-            zip zlib1g-dev unzip python3 python-is-python3 openjdk-11-jdk-headless \
-            lz4 xz-utils zstd cpio libtinfo5 libgl1-mesa-dev
-          sudo curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo -o /usr/local/bin/repo
-          sudo chmod a+x /usr/local/bin/repo
-          git lfs install
-          git config --global user.name  "${GITHUB_ACTOR}"
-          git config --global user.email "${GITHUB_ACTOR}@users.noreply.github.com"
-          git config --global color.ui false
+          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev openjdk-11-jdk python3 python-is-python3
 
-      - name: ROM kaynak kodunu indir
-        env:
-          ROM_URL: ${{ needs.discover.outputs.rom_url }}
-          ROM_BRANCH: ${{ needs.discover.outputs.rom_branch }}
+      - name: Derleme Ortamini Hazirla
         run: |
-          mkdir -p "$ROM_DIR" && cd "$ROM_DIR"
-          repo init -u "$ROM_URL" -b "$ROM_BRANCH" --git-lfs --depth=1 --no-repo-verify
-          for i in 1 2 3; do
-            repo sync -c -j"$(( $(nproc) * 2 ))" --no-clone-bundle --no-tags --optimized-fetch \
-              --prune --force-sync && break
-            echo "Sync basarisiz, tekrar ($i/3)"; sleep 20
-          done
-          df -h /
-
-      - name: Bulunan cihaz agaclarini indir
-        env:
-          PLAN: ${{ needs.discover.outputs.plan }}
-        run: |
-          cd "$ROM_DIR"
-          echo "$PLAN" | jq -c '.[]' | while read -r item; do
-            url=$(jq -r .url <<<"$item"); br=$(jq -r .branch <<<"$item"); path=$(jq -r .path <<<"$item")
-            [[ "$path" =~ ^[A-Za-z0-9_][A-Za-z0-9_./+-]*$ && "$path" != *..* ]] || { echo "::error::guvensiz yol: $path"; exit 1; }
-            echo ">> $url ($br) -> $path"
-            rm -rf "$path"; mkdir -p "$(dirname "$path")"
-            git clone --depth=1 -b "$br" "$url" "$path"
-          done
-
-      - name: Urun dosyasini ROM icin hazirla
-        env:
-          CODENAME: ${{ inputs.device_codename }}
-          PLAN: ${{ needs.discover.outputs.plan }}
-        run: |
-          cd "$ROM_DIR"
-          DEV=$(jq -r '[.[]|select(.role=="device")][0].path' <<<"$PLAN")
-          cd "$DEV"
-          if grep -lE 'vendor/(lineage|crdroid)/config' *.mk >/dev/null 2>&1; then
-            echo "ROM urun dosyasi mevcut."; exit 0
-          fi
-          SRC=$(ls twrp_*.mk omni_*.mk fox_*.mk 2>/dev/null | head -n1 || true)
-          [ -z "$SRC" ] && { echo "::warning::ROM urun dosyasi bulunamadi, lunch basarisiz olabilir."; exit 0; }
-          DST="lineage_${CODENAME}.mk"
-          cp "$SRC" "$DST"
-          sed -i -E -e "s#^PRODUCT_NAME[[:space:]]*:=.*#PRODUCT_NAME := lineage_${CODENAME}#" \
-            -e 's#\$\(call inherit-product,.*(twrp|omni|fox)/.*\)#$(call inherit-product, vendor/lineage/config/common_full_phone.mk)#' "$DST"
-          grep -q 'vendor/lineage/config' "$DST" || \
-            echo '$(call inherit-product, vendor/lineage/config/common_full_phone.mk)' >> "$DST"
-          printf 'PRODUCT_MAKEFILES := $(LOCAL_DIR)/%s\nCOMMON_LUNCH_CHOICES := lineage_%s-userdebug\n' "$DST" "$CODENAME" > AndroidProducts.mk
-          cat "$DST"
-
-      - name: Derle
-        env:
-          CODENAME: ${{ inputs.device_codename }}
-          PLAN: ${{ needs.discover.outputs.plan }}
-        run: |
-          cd "$ROM_DIR"
-          export USE_CCACHE=1 CCACHE_EXEC=/usr/bin/ccache CCACHE_DIR="$HOME/.ccache"
-          ccache -M 20G
-          export LC_ALL=C ALLOW_MISSING_DEPENDENCIES=true _JAVA_OPTIONS="-Xmx6g"
-          export BUILD_USERNAME="$GITHUB_ACTOR" BUILD_HOSTNAME=github-actions
-
-          DEV=$(jq -r '[.[]|select(.role=="device")][0].path' <<<"$PLAN")
-          PN=$(grep -hE '^PRODUCT_NAME[[:space:]]*:=' "$DEV"/*.mk | grep -i "$CODENAME" | head -n1 \
-               | sed -E 's/.*:=[[:space:]]*//; s/[[:space:]]+$//' || true)
-          [ -z "$PN" ] && PN="lineage_${CODENAME}"
-          TARGET="${PN}-userdebug"
-          echo "Lunch hedefi: $TARGET"
-
-          set +e
+          cd /tmp/rom
           source build/envsetup.sh
-          lunch "$TARGET" || { echo "::error::lunch basarisiz ($TARGET): device tree bu ROM ile uyumsuz."; exit 1; }
-          set -e
-          mka bacon -j"$(nproc)" 2>&1 | tee "$ROM_DIR/build.log"
+          lunch ${{ github.event.inputs.rom_type }}_${{ github.event.inputs.device_codename }}-userdebug
 
-      - name: Cikti dosyalarini topla
-        id: out
+      - name: HEDEF DERLE: ${{ matrix.target }}
         run: |
-          cd "$ROM_DIR"; mkdir -p "$HOME/upload"
-          ZIP=$(find out/target/product -maxdepth 2 -name '*.zip' -size +200M \
-                  ! -name '*target_files*' ! -name '*symbols*' | head -n1)
-          [ -z "$ZIP" ] && { echo "::error::ROM zip bulunamadi"; exit 1; }
-          cp "$ZIP" "$HOME/upload/"
-          for f in boot.img recovery.img vendor_boot.img dtbo.img; do
-            [ -f "$(dirname "$ZIP")/$f" ] && cp "$(dirname "$ZIP")/$f" "$HOME/upload/" || true
-          done
-          (cd "$HOME/upload" && sha256sum * > SHA256SUMS.txt && ls -lh)
-          echo "zip=$(basename "$ZIP")" >> "$GITHUB_OUTPUT"
-
-      - name: Release olarak yukle
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CODENAME: ${{ inputs.device_codename }}
-          BRAND: ${{ inputs.device_brand }}
-          MODEL: ${{ inputs.device_model }}
-          COUNTRY: ${{ inputs.country_code }}
-          ROMT: ${{ inputs.rom_type }}
-          AV: ${{ inputs.android_version }}
-          ZIPNAME: ${{ steps.out.outputs.zip }}
-        run: |
-          TAG="${CODENAME}-A${AV}-$(date +%Y%m%d-%H%M)"
-          gh release create "$TAG" "$HOME"/upload/* --repo "$GITHUB_REPOSITORY" \
-            --title "$ROMT A$AV - $BRAND $MODEL ($CODENAME) [$COUNTRY]" \
-            --notes "Otomatik derleme: $ZIPNAME
-          Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-
-      - name: Logu yukle (hata durumunda)
-        if: failure()
-        uses: actions/upload-artifact@v4
+          cd /tmp/rom
+          echo "[*] Karinca Isci: ${{ matrix.target }} derleniyor..."
+          make -j$(nproc --all) ${{ matrix.target }}
+          
+      - name: Parcayi Yukle
+        uses: actions/upload-artifact@v3
         with:
-          name: build-log
-          path: |
-            /home/runner/rom/build.log
-            /home/runner/rom/out/error.log
-          if-no-files-found: ignore
+          name: ${{ matrix.target }}
+          path: /tmp/rom/out/target/product/${{ github.event.inputs.device_codename }}/${{ matrix.target }}.img
+          retention-days: 1
+
+  # ==========================================
+  # ISCI 5: BIRLESTIRICI (ASSEMBLER)
+  # ==========================================
+  assembler:
+    needs: builder
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tum Parcalari Indir
+        uses: actions/download-artifact@v3
+        with:
+          path: /tmp/artifacts
+
+      - name: Parcalari Tek Bir Klasorde Topla
+        run: |
+          mkdir -p /tmp/final_rom
+          cp /tmp/artifacts/bootimage/bootimage.img /tmp/final_rom/boot.img
+          cp /tmp/artifacts/systemimage/systemimage.img /tmp/final_rom/system.img
+          cp /tmp/artifacts/vendorimage/vendorimage.img /tmp/final_rom/vendor.img
+          
+      - name: Nihai ROM'u Paketle (Zip)
+        run: |
+          cd /tmp/final_rom
+          zip -r9 ../${{ github.event.inputs.rom_type }}_${{ github.event.inputs.device_codename }}_karinca_hatti.zip .
+          
+      - name: Nihai ROM'u Yukle
+        uses: actions/upload-artifact@v3
+        with:
+          name: Karinca-Hatti-Nihai-ROM
+          path: /tmp/${{ github.event.inputs.rom_type }}_${{ github.event.inputs.device_codename }}_karinca_hatti.zip
           retention-days: 7
